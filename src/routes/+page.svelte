@@ -4,6 +4,8 @@
   import Login from "$lib/components/forms/Login.svelte";
   import AppLayout from "./AppLayout.svelte";
   import InitialSetupForm from "$lib/components/forms/InitialSetupForm.svelte";
+  import SystemResourcesColumn from "$lib/components/dashboard/SystemResourcesColumn.svelte";
+  import NetworkInformationColumn from "$lib/components/dashboard/NetworkInformationColumn.svelte";
   import { toasts } from "$lib/stores/toastStore";
   import { authStore } from "$lib/stores/authStore";
   import { goto } from "$app/navigation";
@@ -13,6 +15,11 @@
     mdiRestart,
     mdiChevronDown,
     mdiChevronUp,
+    mdiRouter,
+    mdiServerNetwork,
+    mdiEthernet,
+    mdiServer,
+    mdiHarddisk
   } from "@mdi/js";
 
   interface InterfaceData {
@@ -28,35 +35,150 @@
     time: number;
   }
 
+  interface SystemResources {
+    memory: {
+      total: string;
+      total_frmt: string;
+      used: number;
+      used_frmt: string;
+    };
+  }
+
+  interface DiskDevice {
+    device: string;
+    device_type: string;
+    blocks: string;
+    used: string;
+    available: string;
+    used_pct: number;
+    mountpoint: string;
+  }
+
+  interface SystemDisk {
+    devices: DiskDevice[];
+  }
+
   interface DashboardData {
     gatewayStatus: any;
     services: any;
     interfaceTraffic: InterfaceTraffic | null;
+    systemResources?: SystemResources;
+    systemDisk?: SystemDisk;
   }
 
   let isFirstRun: boolean | null = null;
   let isLoading = true;
+  let expandedServices = false;
+  let expandedGateway: string | null = null;
   let dashboardData: DashboardData = {
     gatewayStatus: null,
     services: null,
-    interfaceTraffic: null
+    interfaceTraffic: null,
   };
-  let expandedGateway: string | null = null;
+
   let pollInterval: number;
   let progressInterval: number;
   let progress = 0;
   const UPDATE_INTERVAL = 5000; // 5 seconds
 
-  $: sortedInterfaces = dashboardData.interfaceTraffic 
-    ? Object.entries(dashboardData.interfaceTraffic.interfaces)
-        .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+  // Reactive variables for memory and disk usage
+  $: memoryUsagePercent = dashboardData.systemResources
+    ? Math.round(
+        (dashboardData.systemResources.memory.used / 
+         parseInt(dashboardData.systemResources.memory.total)) * 100
+      )
+    : 0;
+
+  $: mainDisk = dashboardData.systemDisk?.devices
+    ? dashboardData.systemDisk.devices.find((d) => d.mountpoint === "/")
+    : null;
+
+  $: sortedInterfaces = dashboardData.interfaceTraffic
+    ? Object.entries(dashboardData.interfaceTraffic.interfaces).sort(
+        ([, a], [, b]) => a.name.localeCompare(b.name)
+      )
     : [];
+
+  function toggleServicesExpansion() {
+    expandedServices = !expandedServices;
+  }
+
+  function formatBytes(bytes: string): string {
+    const parsedBytes = parseInt(bytes);
+    if (isNaN(parsedBytes)) return "0 B";
+    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    if (parsedBytes === 0) return "0 B";
+    const i = Math.floor(Math.log(parsedBytes) / Math.log(1024));
+    return Math.round(parsedBytes / Math.pow(1024, i)) + " " + sizes[i];
+  }
+
+  async function loadDashboardData() {
+    try {
+      const [gatewayStatus, services, interfaceTraffic, systemResources, systemDisk] = 
+        await Promise.all([
+          invoke<any>("get_gateway_status"),
+          invoke<any>("get_services"),
+          invoke<InterfaceTraffic>("get_interface_traffic"),
+          invoke<SystemResources>("get_system_resources"),
+          invoke<SystemDisk>("get_system_disk")
+        ]);
+
+      dashboardData = { 
+        gatewayStatus, 
+        services, 
+        interfaceTraffic,
+        systemResources,
+        systemDisk
+      };
+    } catch (error) {
+      console.error("Failed to fetch dashboard data:", error);
+      toasts.error("Failed to load dashboard data. Please try again.");
+    }
+  }
+
+  async function restartService(serviceId: string) {
+    try {
+      await invoke("restart_service", { serviceId });
+      toasts.success(`Service ${serviceId} restarted successfully`);
+      await loadDashboardData();
+    } catch (error) {
+      console.error(`Failed to restart service ${serviceId}:`, error);
+      toasts.error(`Failed to restart service ${serviceId}. Please try again.`);
+    }
+  }
+
+  function startPolling() {
+    pollInterval = window.setInterval(async () => {
+      try {
+        const [interfaceTraffic, systemResources, systemDisk] = await Promise.all([
+          invoke<InterfaceTraffic>("get_interface_traffic"),
+          invoke<SystemResources>("get_system_resources"),
+          invoke<SystemDisk>("get_system_disk")
+        ]);
+
+        dashboardData.interfaceTraffic = interfaceTraffic;
+        dashboardData.systemResources = systemResources;
+        dashboardData.systemDisk = systemDisk;
+
+        progress = 0;
+      } catch (error) {
+        console.error("Failed to fetch data:", error);
+      }
+    }, UPDATE_INTERVAL);
+
+    progressInterval = window.setInterval(() => {
+      progress += 100 / (UPDATE_INTERVAL / 100);
+      if (progress >= 100) progress = 0;
+    }, 100);
+  }
+
+  function toggleGatewayExpansion(gatewayName: string) {
+    expandedGateway = expandedGateway === gatewayName ? null : gatewayName;
+  }
 
   onMount(async () => {
     try {
       isFirstRun = await invoke<boolean>("check_first_run");
-      console.log("Is first run:", isFirstRun);
-
       if (!isFirstRun) {
         authStore.setConfigured(true);
         if ($authStore.isLoggedIn) {
@@ -73,53 +195,9 @@
   });
 
   onDestroy(() => {
-    if (pollInterval) clearInterval(pollInterval);
-    if (progressInterval) clearInterval(progressInterval);
+    if (pollInterval) window.clearInterval(pollInterval);
+    if (progressInterval) window.clearInterval(progressInterval);
   });
-
-  async function loadDashboardData() {
-    try {
-      const [gatewayStatus, services, interfaceTraffic] = await Promise.all([
-        invoke<any>("get_gateway_status"),
-        invoke<any>("get_services"),
-        invoke<InterfaceTraffic>("get_interface_traffic")
-      ]);
-
-      dashboardData = { gatewayStatus, services, interfaceTraffic };
-      console.log("Dashboard Data:", dashboardData);
-    } catch (error) {
-      console.error("Failed to fetch dashboard data:", error);
-      toasts.error("Failed to load dashboard data. Please try again.");
-    }
-  }
-
-  function startPolling() {
-    pollInterval = setInterval(async () => {
-      try {
-        const interfaceTraffic = await invoke<InterfaceTraffic>("get_interface_traffic");
-        dashboardData.interfaceTraffic = interfaceTraffic;
-        progress = 0;
-      } catch (error) {
-        console.error("Failed to fetch traffic data:", error);
-      }
-    }, UPDATE_INTERVAL);
-
-    progressInterval = setInterval(() => {
-      progress += (100 / (UPDATE_INTERVAL / 100));
-      if (progress >= 100) progress = 0;
-    }, 100);
-  }
-
-  async function restartService(serviceId: string) {
-    try {
-      await invoke("restart_service", { serviceId });
-      toasts.success(`Service ${serviceId} restarted successfully`);
-      await loadDashboardData();
-    } catch (error) {
-      console.error(`Failed to restart service ${serviceId}:`, error);
-      toasts.error(`Failed to restart service ${serviceId}. Please try again.`);
-    }
-  }
 
   async function handleInitialSetup(event: CustomEvent<{
     profileName: string;
@@ -130,8 +208,6 @@
     pin: string;
   }>) {
     const { profileName, apiKey, apiSecret, apiUrl, port, pin } = event.detail;
-    console.log("Saving initial config...");
-
     try {
       await invoke("save_initial_config", {
         config: {
@@ -144,11 +220,9 @@
         },
       });
 
-      console.log("Configuration saved successfully");
       isFirstRun = false;
       authStore.setConfigured(true);
       toasts.success("Configuration saved successfully!");
-
       setTimeout(() => goto("/"), 100);
     } catch (error) {
       console.error("Failed to save configuration:", error);
@@ -156,41 +230,12 @@
     }
   }
 
-  function handleFormError(event: CustomEvent<{ message: string }>) {
-    toasts.error(event.detail.message);
-  }
-
   async function handleLogin() {
     authStore.login();
     await loadDashboardData();
     startPolling();
   }
-
-  function toggleGatewayExpansion(gatewayName: string) {
-    expandedGateway = expandedGateway === gatewayName ? null : gatewayName;
-  }
-
-  function formatBytes(bytes: string): string {
-    const parsedBytes = parseInt(bytes);
-    if (isNaN(parsedBytes)) return "0 B";
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    if (parsedBytes === 0) return '0 B';
-    const i = Math.floor(Math.log(parsedBytes) / Math.log(1024));
-    return Math.round(parsedBytes / Math.pow(1024, i)) + ' ' + sizes[i];
-  }
 </script>
-
-<style>
-  @keyframes rotate {
-    100% {
-      transform: rotate(360deg);
-    }
-  }
-
-  .progress-ring {
-    animation: rotate 5s linear infinite;
-  }
-</style>
 
 {#if isLoading}
   <div class="min-h-screen flex items-center justify-center bg-base-200">
@@ -211,7 +256,6 @@
       <div class="card bg-base-100 shadow-xl">
         <InitialSetupForm
           on:submit={handleInitialSetup}
-          on:error={handleFormError}
         />
       </div>
     </div>
@@ -220,141 +264,27 @@
   <Login on:login={handleLogin} />
 {:else}
   <AppLayout>
-    <div class="p-4 max-w-3xl mx-auto">
-      <h2 class="text-2xl font-bold mb-4">OPNsense Dashboard</h2>
+    <div class="p-6 max-w-7xl mx-auto">
+      <h2 class="text-2xl font-bold mb-6">Dashboard</h2>
 
       {#if dashboardData.gatewayStatus && dashboardData.services && dashboardData.interfaceTraffic}
-        <div class="space-y-4">
-          <!-- Interface Traffic -->
-          <div class="card bg-base-100 shadow-xl relative">
-            <div class="card-body">
-              <div class="flex justify-between items-center">
-                <h3 class="card-title text-lg">Interface Traffic</h3>
-                <svg class="progress-ring" width="24" height="24" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10" fill="none" stroke="#e5e7eb" stroke-width="2" />
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    fill="none"
-                    stroke="#4f46e5"
-                    stroke-width="2"
-                    stroke-dasharray="62.83185307179586"
-                    stroke-dashoffset={62.83185307179586 * (1 - progress / 100)}
-                    transform="rotate(-90 12 12)"
-                  />
-                </svg>
-              </div>
-              <div class="overflow-x-auto">
-                <table class="table w-full">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Device</th>
-                      <th>Driver</th>
-                      <th>Bytes Received</th>
-                      <th>Bytes Transmitted</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each sortedInterfaces as [key, interfaceData]}
-                      <tr>
-                        <td>{interfaceData.name}</td>
-                        <td>{interfaceData.device}</td>
-                        <td>{interfaceData.driver}</td>
-                        <td>{formatBytes(interfaceData["bytes received"])}</td>
-                        <td>{formatBytes(interfaceData["bytes transmitted"])}</td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SystemResourcesColumn 
+            systemResources={dashboardData.systemResources} 
+            mainDisk={mainDisk}
+            services={dashboardData.services.rows}
+            {expandedServices}
+            {toggleServicesExpansion}
+            {restartService}
+          />
 
-          <!-- Gateway Status -->
-          <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-              <h3 class="card-title text-lg mb-2">Gateways</h3>
-              <ul class="space-y-2">
-                {#each dashboardData.gatewayStatus.items as gateway}
-                  <li class="border rounded-lg p-3">
-                    <div
-                      class="flex justify-between items-center cursor-pointer"
-                      on:click={() => toggleGatewayExpansion(gateway.name)}
-                    >
-                      <div>
-                        <div class="font-medium">{gateway.name}</div>
-                        <div class="text-sm opacity-50">{gateway.address}</div>
-                      </div>
-                      <span
-                        class="badge {gateway.status_translated === 'Online'
-                          ? 'badge-success'
-                          : 'badge-error'}"
-                      >
-                        {gateway.status_translated}
-                      </span>
-                      <svg class="w-5 h-5" viewBox="0 0 24 24">
-                        <path
-                          fill="currentColor"
-                          d={expandedGateway === gateway.name
-                            ? mdiChevronUp
-                            : mdiChevronDown}
-                        />
-                      </svg>
-                    </div>
-                    {#if expandedGateway === gateway.name}
-                      <div class="mt-2 text-sm">
-                        <p>RTT: {gateway.delay === "~" ? "-" : gateway.delay}</p>
-                        <p>RTTd: {gateway.stddev === "~" ? "-" : gateway.stddev}</p>
-                        <p>Loss: {gateway.loss === "~" ? "-" : gateway.loss}</p>
-                      </div>
-                    {/if}
-                  </li>
-                {/each}
-              </ul>
-            </div>
-          </div>
-
-          <!-- Services -->
-          <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-              <h3 class="card-title text-lg mb-2">Services</h3>
-              <ul class="space-y-2">
-                {#each dashboardData.services.rows as service}
-                  <li class="border rounded-lg p-3">
-                    <div class="flex justify-between items-center">
-                      <div class="flex-grow">
-                        <div class="font-medium">{service.name}</div>
-                        <div class="text-sm opacity-50">{service.description}</div>
-                      </div>
-                      <div class="flex items-center space-x-3">
-                        <svg
-                          class="w-5 h-5 {service.running ? 'text-success' : 'text-error'}"
-                          viewBox="0 0 24 24"
-                          title={service.running ? "Service is running" : "Service is stopped"}
-                        >
-                          <path
-                            fill="currentColor"
-                            d={service.running ? mdiArrowUp : mdiArrowDown}
-                          />
-                        </svg>
-                        <button
-                          class="btn btn-sm btn-ghost"
-                          on:click|stopPropagation={() => restartService(service.id)}
-                          title="Restart Service"
-                        >
-                          <svg class="w-4 h-4" viewBox="0 0 24 24">
-                            <path fill="currentColor" d={mdiRestart} />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                {/each}
-              </ul>
-            </div>
-          </div>
+          <NetworkInformationColumn 
+            gatewayStatus={dashboardData.gatewayStatus.items}
+            {expandedGateway}
+            {toggleGatewayExpansion}
+            {sortedInterfaces}
+            {formatBytes}
+          />
         </div>
       {:else}
         <div class="flex justify-center items-center h-64">
@@ -364,3 +294,15 @@
     </div>
   </AppLayout>
 {/if}
+
+<style>
+  @keyframes rotate {
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  .progress-ring {
+    animation: rotate 5s linear infinite;
+  }
+</style>

@@ -1,3 +1,70 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Add these overrides to your app.css file */
+
+/* Override primary color with CSS variables for DaisyUI */
+:root {
+    --p: 210 13% 27%; /* #3a4851 in hsl format */
+    --pf: 212 17% 21%; /* #2c373f in hsl format */
+    --pc: 0 0% 100%; /* white text */
+    
+    /* Secondary color - Teal */
+    --s: 178 36% 46%; /* #4A9D9A in hsl format */
+    --sf: 178 40% 40%; /* slightly darker for hover */
+    --sc: 0 0% 100%; /* white text */
+  }
+  
+  /* Direct overrides for primary buttons */
+  .btn-primary {
+    background-color: #3a4851 !important;
+    border-color: #3a4851 !important;
+    box-shadow: 0 1px 3px 0 rgba(58, 72, 81, 0.2), 0 1px 2px 0 rgba(58, 72, 81, 0.06) !important;
+  }
+  
+  .btn-primary:hover {
+    background-color: #2c373f !important;
+    border-color: #2c373f !important;
+  }
+  
+  .btn-primary:focus {
+    box-shadow: 0 0 0 2px rgba(58, 72, 81, 0.2) !important;
+  }
+  
+  /* Direct overrides for secondary buttons */
+  .btn-secondary {
+    background-color: #4A9D9A !important;
+    border-color: #4A9D9A !important;
+    box-shadow: 0 1px 3px 0 rgba(74, 157, 154, 0.2), 0 1px 2px 0 rgba(74, 157, 154, 0.06) !important;
+  }
+  
+  .btn-secondary:hover {
+    background-color: #3A8A87 !important;
+    border-color: #3A8A87 !important;
+  }
+  
+  .btn-secondary:focus {
+    box-shadow: 0 0 0 2px rgba(74, 157, 154, 0.2) !important;
+  }
+  
+  /* Handle focus and active states for both button types */
+  .btn-primary:active, .btn-secondary:active {
+    transform: scale(0.98);
+  }
+  
+  .bg-primary {
+    background-color: #3a4851 !important;
+  }
+  
+  .text-primary {
+    color: #3a4851 !important;
+  }
+  
+  .bg-secondary {
+    background-color: #4A9D9A !important;
+  }
+  
+  .text-secondary {
+    color: #4A9D9A !important;
+  }

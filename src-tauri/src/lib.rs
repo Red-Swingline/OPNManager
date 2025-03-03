@@ -10,6 +10,7 @@ mod traffic;
 mod update_checker;
 mod firewall_logs;
 mod routes; 
+mod system_resources;
 
 use db::Database;
 use tauri::Manager;
@@ -43,6 +44,10 @@ pub fn run() {
             alias::add_ip_to_alias,
             alias::get_alias,
             alias::search_alias_items,
+            alias::toggle_alias,
+            alias::delete_alias,
+            alias::apply_alias_changes,
+            alias::add_alias,
             dashboard::get_gateway_status,  
             dashboard::get_services,    
             dashboard::restart_service,
@@ -66,7 +71,8 @@ pub fn run() {
             update_checker::check_for_updates,
             update_checker::get_changelog,
             update_checker::start_update,
-
+            system_resources::get_system_resources,
+            system_resources::get_system_disk,
             ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

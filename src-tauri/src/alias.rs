@@ -41,6 +41,69 @@ pub async fn get_alias(database: State<'_, Database>, alias_name: String) -> Res
 
     Ok(alias.clone())
 }
+
+#[tauri::command]
+pub async fn add_alias(
+    database: State<'_, Database>, 
+    name: String,
+    alias_type: String,
+    content: String,
+    description: String,
+    enabled: bool
+) -> Result<Value, String> {
+    let api_info = database.get_default_api_info()
+        .map_err(|e| format!("Failed to get API info: {}", e))?
+        .ok_or_else(|| "API info not found".to_string())?;
+
+    let url = build_api_url(&api_info, "/api/firewall/alias/addItem/");
+
+    // Format content to have each item on a new line
+    let formatted_content = content.split(',')
+        .map(|s| s.trim())
+        .collect::<Vec<&str>>()
+        .join("\n");
+
+    let payload = json!({
+        "alias": {
+            "enabled": if enabled { "1" } else { "0" },
+            "name": name,
+            "type": alias_type,
+            "proto": "",
+            "categories": "",
+            "updatefreq": "",
+            "content": formatted_content,
+            "interface": "",
+            "counters": "0",
+            "description": description
+        },
+        "network_content": "",  // For network group aliases
+        "authgroup_content": ""  // For OpenVPN group aliases
+    });
+
+    let response = make_http_request(
+        "POST",
+        &url,
+        Some(payload),
+        None,
+        Some(30),
+        Some(&api_info.api_key),
+        Some(&api_info.api_secret),
+    )
+    .await?;
+
+    // Parse the response to get the UUID
+    let result = response.json::<Value>().await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+    
+    // Check if the alias was added successfully
+    if result["result"].as_str() == Some("saved") {
+        // Apply the changes
+        apply_alias_changes(database).await?;
+    }
+
+    Ok(result)
+}
+
 #[tauri::command]
 pub async fn add_ip_to_alias(database: State<'_, Database>, uuid: String, current_content: String, _new_ip: String) -> Result<(), String> {
     let api_info = database.get_default_api_info()
@@ -72,6 +135,8 @@ pub async fn add_ip_to_alias(database: State<'_, Database>, uuid: String, curren
     .await?;
 
     if response.status().is_success() {
+        // Apply changes
+        apply_alias_changes(database).await?;
         Ok(())
     } else {
         Err(format!("Failed to add IP to alias: {}", response.status()))
@@ -109,10 +174,118 @@ pub async fn remove_ip_from_alias(database: State<'_, Database>, uuid: String, c
     .await?;
 
     if response.status().is_success() {
+        // Apply changes
+        apply_alias_changes(database).await?;
         Ok(())
     } else {
         Err(format!("Failed to remove IP from alias: {}", response.status()))
     }
+}
+
+#[tauri::command]
+pub async fn toggle_alias(database: State<'_, Database>, uuid: String) -> Result<Value, String> {
+    let api_info = database.get_default_api_info()
+        .map_err(|e| format!("Failed to get API info: {}", e))?
+        .ok_or_else(|| "API info not found".to_string())?;
+
+    let url = build_api_url(&api_info, &format!("/api/firewall/alias/toggleItem/{}", uuid));
+
+    let response = make_http_request(
+        "POST",
+        &url,
+        Some(json!({})),
+        None,
+        Some(30),
+        Some(&api_info.api_key),
+        Some(&api_info.api_secret),
+    )
+    .await?;
+
+    let result = response.json::<Value>().await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+    
+    // Check if the toggle was successful and apply changes
+    if result["changed"].as_bool().unwrap_or(false) {
+        apply_alias_changes(database).await?;
+    }
+
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn delete_alias(database: State<'_, Database>, uuid: String) -> Result<Value, String> {
+    let api_info = database.get_default_api_info()
+        .map_err(|e| format!("Failed to get API info: {}", e))?
+        .ok_or_else(|| "API info not found".to_string())?;
+
+    let url = build_api_url(&api_info, &format!("/api/firewall/alias/delItem/{}", uuid));
+
+    let response = make_http_request(
+        "POST",
+        &url,
+        Some(json!({})),
+        None,
+        Some(30),
+        Some(&api_info.api_key),
+        Some(&api_info.api_secret),
+    )
+    .await;
+
+    match response {
+        Ok(response) => {
+            if response.status().is_success() {
+                let result = response.json::<Value>().await
+                    .map_err(|e| format!("Failed to parse response: {}", e))?;
+                
+                // Apply changes after deletion
+                apply_alias_changes(database).await?;
+                Ok(result)
+            } else {
+                // Try to parse the error response
+                let error_text = response.text().await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                
+                // Check if it's the "alias in use" error
+                if error_text.contains("Alias in use") || error_text.contains("Currently in use by") {
+                    Err(format!("Cannot delete this alias because it is currently in use by firewall rules. Please remove references to this alias in your firewall rules first."))
+                } else {
+                    Err(format!("Server returned error: {}", error_text))
+                }
+            }
+        },
+        Err(e) => Err(e)
+    }
+}
+
+#[tauri::command]
+pub async fn apply_alias_changes(database: State<'_, Database>) -> Result<Value, String> {
+    let api_info = database.get_default_api_info()
+        .map_err(|e| format!("Failed to get API info: {}", e))?
+        .ok_or_else(|| "API info not found".to_string())?;
+
+    let url = build_api_url(&api_info, "/api/firewall/alias/set");
+
+    let payload = json!({
+        "alias": {
+            "geoip": {
+                "url": ""
+            }
+        }
+    });
+
+    let response = make_http_request(
+        "POST",
+        &url,
+        Some(payload),
+        None,
+        Some(30),
+        Some(&api_info.api_key),
+        Some(&api_info.api_secret),
+    )
+    .await?;
+
+    response.json::<Value>().await
+        .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
 async fn get_alias_info(api_info: &crate::db::ApiInfo, uuid: &str) -> Result<Value, String> {

@@ -1,7 +1,7 @@
 {
-  "productName": "opnsensemanager",
+  "productName": "OPNManager",
   "version": "3.0.5",
-  "identifier": "com.opnsensemanager.app",
+  "identifier": "com.OPNManager.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "opnsensemanager",
+        "title": "OPNManager",
         "width": 800,
         "height": 600
       }
