@@ -197,17 +197,7 @@
                 </div>
               </div>
               <div class="flex gap-2">
-                <button
-                  class="btn btn-sm btn-outline"
-                  on:click={() => openEditRuleModal(rule)}
-                  title="Edit Rule"
-                >
-                  <svg class="w-4 h-4 mr-1" viewBox="0 0 24 24">
-                    <path fill="currentColor" d={mdiPencil} />
-                  </svg>
-                  Edit
-                </button>
-                
+                <!-- Enable/Disable Button -->
                 <button
                   class="btn btn-sm {rule.enabled === '1' ? 'btn-error' : 'btn-success'}"
                   on:click={() => toggleRule(rule)}
@@ -217,22 +207,33 @@
                   {#if rule.isToggling}
                     <span class="loading loading-spinner loading-xs"></span>
                   {:else}
-                    <svg class="w-4 h-4 mr-1" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4 sm:mr-1" viewBox="0 0 24 24">
                       <path fill="currentColor" d={rule.enabled === '1' ? mdiClose : mdiCheck} />
                     </svg>
+                    <span class="hidden sm:inline">{rule.enabled === '1' ? 'Disable' : 'Enable'}</span>
                   {/if}
-                  {rule.enabled === '1' ? 'Disable' : 'Enable'}
                 </button>
                 
+                <!-- Edit Button -->
                 <button
-                  class="btn btn-sm btn-outline btn-error"
+                  class="btn btn-sm btn-ghost"
+                  on:click={() => openEditRuleModal(rule)}
+                  title="Edit Rule"
+                >
+                  <svg class="w-4 h-4" viewBox="0 0 24 24">
+                    <path fill="currentColor" d={mdiPencil} />
+                  </svg>
+                </button>
+                
+                <!-- Delete Button -->
+                <button
+                  class="btn btn-sm btn-ghost text-error"
                   on:click={() => openDeleteConfirmation(rule)}
                   title="Delete Rule"
                 >
-                  <svg class="w-4 h-4 mr-1" viewBox="0 0 24 24">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24">
                     <path fill="currentColor" d={mdiDelete} />
                   </svg>
-                  Delete
                 </button>
               </div>
             </div>

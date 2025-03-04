@@ -6,7 +6,16 @@
   import AddAliasModal from "$lib/components/alias/AddAliasModal.svelte";
   import { toasts } from "$lib/stores/toastStore";
   import { authStore } from "$lib/stores/authStore";
-  import { mdiRefresh, mdiMagnify, mdiPlus, mdiClose, mdiToggleSwitch, mdiToggleSwitchOffOutline, mdiDelete, mdiCheck } from "@mdi/js";
+  import {
+    mdiRefresh,
+    mdiMagnify,
+    mdiPlus,
+    mdiClose,
+    mdiToggleSwitch,
+    mdiToggleSwitchOffOutline,
+    mdiDelete,
+    mdiCheck,
+  } from "@mdi/js";
 
   interface Alias {
     name: string;
@@ -43,7 +52,7 @@
   let filter = "";
   let ipToRemove: string | null = null;
   let selectedIndex = -1;
-  
+
   // State variables for toggle and delete actions
   let showToggleConfirmation = false;
   let showDeleteConfirmation = false;
@@ -66,16 +75,19 @@
     isLoading = true;
     error = null;
     try {
-      const detailsResult = await invoke<AliasItemsResponse>("search_alias_items");
+      const detailsResult =
+        await invoke<AliasItemsResponse>("search_alias_items");
 
       if (detailsResult && detailsResult.rows) {
-        const excludedPrefixes = ['bogons', '__', 'virusprot', 'sshlockout'];
-        
+        const excludedPrefixes = ["bogons", "__", "virusprot", "sshlockout"];
+
         aliases = {};
         aliasDetails = {};
 
-        detailsResult.rows.forEach(item => {
-          if (!excludedPrefixes.some(prefix => item.name.startsWith(prefix))) {
+        detailsResult.rows.forEach((item) => {
+          if (
+            !excludedPrefixes.some((prefix) => item.name.startsWith(prefix))
+          ) {
             aliases[item.name] = {
               name: item.name,
               description: item.description,
@@ -90,7 +102,8 @@
       applyFilter();
     } catch (err) {
       console.error("Failed to fetch aliases:", err);
-      error = err instanceof Error ? err.message : "An unexpected error occurred";
+      error =
+        err instanceof Error ? err.message : "An unexpected error occurred";
       toasts.error(`Failed to fetch aliases: ${error}`);
     } finally {
       isLoading = false;
@@ -119,7 +132,9 @@
     isAddingIp = true;
     try {
       const currentContent = selectedAlias.content || "";
-      const updatedContent = currentContent ? `${currentContent}\n${newIpAddress}` : newIpAddress;
+      const updatedContent = currentContent
+        ? `${currentContent}\n${newIpAddress}`
+        : newIpAddress;
 
       await invoke("add_ip_to_alias", {
         uuid: selectedAlias.uuid,
@@ -160,7 +175,9 @@
 
     try {
       const currentContent = selectedAlias.content || "";
-      const contentArray = currentContent.split("\n").map((item) => item.trim());
+      const contentArray = currentContent
+        .split("\n")
+        .map((item) => item.trim());
       const updatedContentArray = contentArray.filter((item) => item !== ip);
       const updatedContent = updatedContentArray.join("\n");
 
@@ -179,27 +196,30 @@
       );
     }
   }
-  
+
   // Function to toggle alias enabled/disabled state
   function openToggleConfirmation(alias: AliasDetails): void {
     aliasToToggle = alias;
     showToggleConfirmation = true;
   }
-  
+
   async function confirmToggleAlias(): Promise<void> {
     if (!aliasToToggle) return;
-    
+
     isProcessing = true;
     try {
-      const result = await invoke<{result: string, changed: boolean}>("toggle_alias", {
-        uuid: aliasToToggle.uuid
-      });
-      
+      const result = await invoke<{ result: string; changed: boolean }>(
+        "toggle_alias",
+        {
+          uuid: aliasToToggle.uuid,
+        },
+      );
+
       if (result.changed) {
         const action = result.result === "Enabled" ? "enabled" : "disabled";
         toasts.success(`Alias ${aliasToToggle.name} ${action} successfully`);
         await fetchAliasesAndDetails();
-        
+
         // If the currently selected alias was toggled, refresh the details
         if (selectedAlias && selectedAlias.uuid === aliasToToggle.uuid) {
           selectedAlias = aliasDetails[aliasToToggle.name];
@@ -216,40 +236,46 @@
       aliasToToggle = null;
     }
   }
-  
+
   // Function to handle alias deletion
   function openDeleteConfirmation(alias: AliasDetails): void {
     aliasToDelete = alias;
     showDeleteConfirmation = true;
   }
-  
+
   async function confirmDeleteAlias(): Promise<void> {
     if (!aliasToDelete) return;
-    
+
     isProcessing = true;
     try {
-      const result = await invoke<{result: string}>("delete_alias", {
-        uuid: aliasToDelete.uuid
+      const result = await invoke<{ result: string }>("delete_alias", {
+        uuid: aliasToDelete.uuid,
       });
-      
+
       if (result.result === "deleted") {
         toasts.success(`Alias ${aliasToDelete.name} deleted successfully`);
-        
+
         // If the currently open modal is for the deleted alias, close it
         if (selectedAlias && selectedAlias.uuid === aliasToDelete.uuid) {
           closeModal();
         }
-        
+
         // Refresh the alias list
         await fetchAliasesAndDetails();
       }
     } catch (err) {
       console.error("Failed to delete alias:", err);
-      
+
       // Check for the "in use" error message
       const errorMessage = String(err);
-      if (errorMessage.includes("in use") || errorMessage.includes("Currently in use")) {
-        toasts.error(`Cannot delete alias "${aliasToDelete.name}" because it is being used by firewall rules. You must first remove all references to this alias.`, 6000);
+      if (
+        errorMessage.includes("in use") ||
+        errorMessage.includes("Currently in use")
+      ) {
+        toasts.error(
+          `Cannot delete alias "${aliasToDelete.name}" because it is being used by firewall rules. You must first remove all references to this alias.`,
+          6000,
+        );
       } else {
         toasts.error(`Failed to delete alias: ${errorMessage}`);
       }
@@ -262,7 +288,8 @@
 
   async function refreshAliasDetails(aliasName: string): Promise<void> {
     try {
-      const freshAliasDetails = await invoke<AliasItemsResponse>("search_alias_items");
+      const freshAliasDetails =
+        await invoke<AliasItemsResponse>("search_alias_items");
 
       if (freshAliasDetails && freshAliasDetails.rows) {
         const freshAlias = freshAliasDetails.rows.find(
@@ -332,12 +359,9 @@
   <div class="max-w-6xl mx-auto">
     <div class="flex justify-between items-center mb-6">
       <h2 class="text-2xl font-bold">Alias List</h2>
-      
+
       <!-- Add Alias Button -->
-      <button 
-        class="btn btn-primary" 
-        on:click={openAddAliasModal}
-      >
+      <button class="btn btn-primary" on:click={openAddAliasModal}>
         <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24">
           <path fill="currentColor" d={mdiPlus} />
         </svg>
@@ -399,16 +423,20 @@
                       e.preventDefault();
                       if (details) openToggleConfirmation(details);
                     }}
-                    title={details && details.enabled === "1" ? "Disable" : "Enable"}
+                    title={details && details.enabled === "1"
+                      ? "Disable"
+                      : "Enable"}
                   >
                     <svg class="w-5 h-5" viewBox="0 0 24 24">
                       <path
                         fill="currentColor"
-                        d={details && details.enabled === "1" ? mdiToggleSwitch : mdiToggleSwitchOffOutline}
+                        d={details && details.enabled === "1"
+                          ? mdiToggleSwitch
+                          : mdiToggleSwitchOffOutline}
                       />
                     </svg>
                   </button>
-                  
+
                   <!-- Delete button -->
                   <button
                     class="btn btn-sm btn-ghost text-error"
@@ -419,10 +447,7 @@
                     title="Delete"
                   >
                     <svg class="w-5 h-5" viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d={mdiDelete}
-                      />
+                      <path fill="currentColor" d={mdiDelete} />
                     </svg>
                   </button>
                 </div>
@@ -455,7 +480,7 @@
       <div
         class="bg-base-100 rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
       >
-        <div class="flex justify-between items-center mb-4">
+        <div class="mb-4">
           <h2 class="text-2xl font-bold flex items-center gap-2">
             {selectedAlias.name}
             {#if selectedAlias.enabled === "0"}
@@ -464,37 +489,6 @@
               <span class="badge badge-success">Enabled</span>
             {/if}
           </h2>
-          <div class="flex space-x-3">
-            <!-- Toggle button -->
-            <button
-              class="btn btn-sm btn-outline btn-info"
-              on:click={() => openToggleConfirmation(selectedAlias)}
-              title={selectedAlias.enabled === "1" ? "Disable" : "Enable"}
-            >
-              <svg class="w-5 h-5 mr-1" viewBox="0 0 24 24">
-                <path
-                  fill="currentColor"
-                  d={selectedAlias.enabled === "1" ? mdiToggleSwitch : mdiToggleSwitchOffOutline}
-                />
-              </svg>
-              {selectedAlias.enabled === "1" ? "Disable" : "Enable"}
-            </button>
-            
-            <!-- Delete button -->
-            <button
-              class="btn btn-sm btn-outline btn-error"
-              on:click={() => openDeleteConfirmation(selectedAlias)}
-              title="Delete"
-            >
-              <svg class="w-5 h-5 mr-1" viewBox="0 0 24 24">
-                <path
-                  fill="currentColor"
-                  d={mdiDelete}
-                />
-              </svg>
-              Delete
-            </button>
-          </div>
         </div>
         <p class="mb-4">
           {selectedAlias.description || "No description assigned."}
@@ -503,7 +497,9 @@
         <h3 class="text-xl font-semibold mb-2">IP Addresses</h3>
         {#if selectedAlias.content}
           <div class="flex flex-wrap gap-2 mb-4">
-            {#each selectedAlias.content.split("\n").map((ip) => ip.trim()) as ip}
+            {#each selectedAlias.content
+              .split("\n")
+              .map((ip) => ip.trim()) as ip}
               {#if ip}
                 <div class="badge badge-lg gap-2 p-3">
                   {ip}
@@ -523,7 +519,7 @@
           <p class="mb-4">No IP addresses assigned to this alias.</p>
         {/if}
 
-        <div class="flex items-center mb-4">
+        <div class="flex items-center mb-6">
           <input
             type="text"
             placeholder="New IP Address"
@@ -545,13 +541,41 @@
           </button>
         </div>
 
-        <div class="flex justify-end space-x-2">
+        <div class="flex flex-wrap gap-2 justify-end mt-4">
+          <!-- Toggle button -->
+          <button
+            class="btn btn-outline btn-info"
+            on:click={() => openToggleConfirmation(selectedAlias)}
+            title={selectedAlias.enabled === "1" ? "Disable" : "Enable"}
+          >
+            <svg class="w-5 h-5 mr-1" viewBox="0 0 24 24">
+              <path
+                fill="currentColor"
+                d={selectedAlias.enabled === "1"
+                  ? mdiToggleSwitch
+                  : mdiToggleSwitchOffOutline}
+              />
+            </svg>
+            {selectedAlias.enabled === "1" ? "Disable" : "Enable"}
+          </button>
+
+          <!-- Delete button -->
+          <button
+            class="btn btn-outline btn-error"
+            on:click={() => openDeleteConfirmation(selectedAlias)}
+            title="Delete"
+          >
+            <svg class="w-5 h-5 mr-1" viewBox="0 0 24 24">
+              <path fill="currentColor" d={mdiDelete} />
+            </svg>
+            Delete
+          </button>
+
           <button on:click={closeModal} class="btn btn-outline">Close</button>
         </div>
       </div>
     </div>
   {/if}
-
   <!-- Remove IP Confirmation Modal -->
   {#if ipToRemove}
     <div
@@ -571,18 +595,24 @@
       </div>
     </div>
   {/if}
-  
+
   <!-- Toggle Alias Confirmation Modal -->
   {#if showToggleConfirmation && aliasToToggle}
     <div
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
     >
       <div class="bg-base-100 p-6 rounded-lg shadow-xl max-w-md w-full">
-        <h3 class="text-lg font-bold mb-4">Confirm {aliasToToggle.enabled === "1" ? "Disable" : "Enable"}</h3>
+        <h3 class="text-lg font-bold mb-4">
+          Confirm {aliasToToggle.enabled === "1" ? "Disable" : "Enable"}
+        </h3>
         <p class="mb-4">
-          Are you sure you want to {aliasToToggle.enabled === "1" ? "disable" : "enable"} the alias "{aliasToToggle.name}"?
+          Are you sure you want to {aliasToToggle.enabled === "1"
+            ? "disable"
+            : "enable"} the alias "{aliasToToggle.name}"?
           {#if aliasToToggle.enabled === "1"}
-            <span class="block mt-2 text-error">Disabling this alias may affect firewall rules that use it.</span>
+            <span class="block mt-2 text-error"
+              >Disabling this alias may affect firewall rules that use it.</span
+            >
           {/if}
         </p>
         <div class="flex justify-end space-x-2">
@@ -597,7 +627,9 @@
             Cancel
           </button>
           <button
-            class="btn {aliasToToggle.enabled === '1' ? 'btn-error' : 'btn-success'}"
+            class="btn {aliasToToggle.enabled === '1'
+              ? 'btn-error'
+              : 'btn-success'}"
             on:click={confirmToggleAlias}
             disabled={isProcessing}
           >
@@ -614,7 +646,7 @@
       </div>
     </div>
   {/if}
-  
+
   <!-- Delete Alias Confirmation Modal -->
   {#if showDeleteConfirmation && aliasToDelete}
     <div
@@ -625,7 +657,8 @@
         <p class="mb-4">
           Are you sure you want to delete the alias "{aliasToDelete.name}"?
           <span class="block mt-2 text-error font-semibold">
-            Warning: This action cannot be undone. Deleting this alias may break any firewall rules that reference it.
+            Warning: This action cannot be undone. Deleting this alias may break
+            any firewall rules that reference it.
           </span>
         </p>
         <div class="flex justify-end space-x-2">
@@ -657,9 +690,9 @@
       </div>
     </div>
   {/if}
-  
+
   <!-- Add Alias Modal -->
-  <AddAliasModal 
+  <AddAliasModal
     bind:showModal={showAddAliasModal}
     existingAliases={aliasDetails}
     on:refresh={handleAddAliasRefresh}
