@@ -1,18 +1,20 @@
-mod db;
-mod commands;
-mod http_client;
-mod devices;
 mod alias;
+mod commands;
 mod dashboard;
+mod db;
+mod devices;
 mod firewall;
+mod firewall_logs;
+mod http_client;
+mod pin_cache;
 mod power;
+mod routes;
+mod system_resources;
 mod traffic;
 mod update_checker;
-mod firewall_logs;
-mod routes; 
-mod system_resources;
 
 use db::Database;
+use pin_cache::PinCache;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -21,15 +23,18 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_log::Builder::new().build())
         .setup(|app| {
+            let pin_cache = PinCache::new();
+            app.manage(pin_cache);
+
             let db = Database::new(app.handle()).expect("Failed to initialize database");
             app.manage(db);
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::check_first_run, 
-            commands::save_initial_config, 
-            commands::verify_pin, 
-            commands::get_api_info, 
+            commands::check_first_run,
+            commands::save_initial_config,
+            commands::get_api_info,
             commands::update_api_info,
             commands::get_api_profiles,
             commands::update_pin,
@@ -37,6 +42,9 @@ pub fn run() {
             commands::add_api_profile,
             commands::delete_api_profile,
             commands::set_default_profile,
+            pin_cache::set_pin,
+            pin_cache::clear_pin,
+            pin_cache::verify_pin,
             devices::get_devices,
             devices::flush_arp_table,
             alias::list_network_aliases,
@@ -48,11 +56,11 @@ pub fn run() {
             alias::delete_alias,
             alias::apply_alias_changes,
             alias::add_alias,
-            dashboard::get_gateway_status,  
-            dashboard::get_services,    
+            dashboard::get_gateway_status,
+            dashboard::get_services,
             dashboard::restart_service,
             firewall::get_firewall_rules,
-            firewall::toggle_firewall_rule,  
+            firewall::toggle_firewall_rule,
             firewall::apply_firewall_changes,
             firewall::get_rule_template,
             firewall::add_firewall_rule,
@@ -79,7 +87,7 @@ pub fn run() {
             update_checker::start_update,
             system_resources::get_system_resources,
             system_resources::get_system_disk,
-            ])
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

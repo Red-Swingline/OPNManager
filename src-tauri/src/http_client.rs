@@ -1,8 +1,11 @@
+use base64::{engine::general_purpose, Engine as _};
 use log::{error, info};
-use reqwest::{header::{HeaderMap, AUTHORIZATION}, Client, Response};
+use reqwest::{
+    header::{HeaderMap, AUTHORIZATION},
+    Client, Response,
+};
 use serde_json::Value;
 use std::time::Duration;
-use base64::{Engine as _, engine::general_purpose};
 
 pub async fn make_http_request(
     request_type: &str,

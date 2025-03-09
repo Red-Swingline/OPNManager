@@ -1,8 +1,8 @@
-use serde::{Serialize, Deserialize};
-use tauri::State;
 use crate::db::Database;
 use crate::http_client::make_http_request;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tauri::State;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Route {
@@ -63,7 +63,8 @@ fn build_api_url(api_info: &crate::db::ApiInfo, endpoint: &str) -> String {
 
 #[tauri::command]
 pub async fn get_routes(database: State<'_, Database>) -> Result<RoutesResponse, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
@@ -87,13 +88,16 @@ pub async fn get_routes(database: State<'_, Database>) -> Result<RoutesResponse,
     )
     .await?;
 
-    response.json::<RoutesResponse>().await
+    response
+        .json::<RoutesResponse>()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
 #[tauri::command]
 pub async fn get_route_info(database: State<'_, Database>) -> Result<RouteInfoResponse, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
@@ -110,7 +114,9 @@ pub async fn get_route_info(database: State<'_, Database>) -> Result<RouteInfoRe
     )
     .await?;
 
-    response.json::<RouteInfoResponse>().await
+    response
+        .json::<RouteInfoResponse>()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
@@ -122,7 +128,8 @@ pub async fn add_route(
     description: String,
     disabled: bool,
 ) -> Result<AddRouteResponse, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
@@ -150,18 +157,25 @@ pub async fn add_route(
     )
     .await?;
 
-    let response_text = response.text().await
+    let response_text = response
+        .text()
+        .await
         .map_err(|e| format!("Failed to get response text: {}", e))?;
 
     println!("Received response: {}", response_text);
 
-    serde_json::from_str(&response_text)
-        .map_err(|e| format!("Failed to parse response: {} (Response was: {})", e, response_text))
+    serde_json::from_str(&response_text).map_err(|e| {
+        format!(
+            "Failed to parse response: {} (Response was: {})",
+            e, response_text
+        )
+    })
 }
 
 #[tauri::command]
 pub async fn delete_route(database: State<'_, Database>, uuid: String) -> Result<(), String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
@@ -186,12 +200,19 @@ pub async fn delete_route(database: State<'_, Database>, uuid: String) -> Result
 }
 
 #[tauri::command]
-pub async fn toggle_route(database: State<'_, Database>, uuid: String) -> Result<ToggleResponse, String> {
-    let api_info = database.get_default_api_info()
+pub async fn toggle_route(
+    database: State<'_, Database>,
+    uuid: String,
+) -> Result<ToggleResponse, String> {
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
-    let url = build_api_url(&api_info, &format!("/api/routes/routes/toggleroute/{}", uuid));
+    let url = build_api_url(
+        &api_info,
+        &format!("/api/routes/routes/toggleroute/{}", uuid),
+    );
 
     let response = make_http_request(
         "POST",
@@ -204,13 +225,16 @@ pub async fn toggle_route(database: State<'_, Database>, uuid: String) -> Result
     )
     .await?;
 
-    response.json::<ToggleResponse>().await
+    response
+        .json::<ToggleResponse>()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
 #[tauri::command]
 pub async fn apply_changes(database: State<'_, Database>) -> Result<ReconfigureResponse, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
@@ -227,6 +251,8 @@ pub async fn apply_changes(database: State<'_, Database>) -> Result<ReconfigureR
     )
     .await?;
 
-    response.json::<ReconfigureResponse>().await
+    response
+        .json::<ReconfigureResponse>()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))
 }

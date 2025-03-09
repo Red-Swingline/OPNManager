@@ -1,10 +1,10 @@
-use log::error;
-use serde::{Serialize, Deserialize};
-use tauri::State;
 use crate::db::Database;
 use crate::http_client::make_http_request;
+use log::error;
 use reqwest::header::{HeaderMap, ACCEPT};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tauri::State;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FirewallLog {
@@ -59,12 +59,16 @@ pub struct InterfaceNames(pub HashMap<String, String>);
 
 #[tauri::command]
 pub async fn get_log_filters(database: State<'_, Database>) -> Result<LogFilters, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
-    let url = format!("{}:{}/api/diagnostics/firewall/log_filters", api_info.api_url, api_info.port);
-    
+    let url = format!(
+        "{}:{}/api/diagnostics/firewall/log_filters",
+        api_info.api_url, api_info.port
+    );
+
     let mut headers = HeaderMap::new();
     headers.insert(ACCEPT, "application/json".parse().unwrap());
 
@@ -79,17 +83,23 @@ pub async fn get_log_filters(database: State<'_, Database>) -> Result<LogFilters
     )
     .await?;
 
-    response.json::<LogFilters>().await
+    response
+        .json::<LogFilters>()
+        .await
         .map_err(|e| format!("Failed to parse log filters: {}", e))
 }
 
 #[tauri::command]
 pub async fn get_interface_names(database: State<'_, Database>) -> Result<InterfaceNames, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
-    let url = format!("{}:{}/api/diagnostics/interface/getInterfaceNames", api_info.api_url, api_info.port);
+    let url = format!(
+        "{}:{}/api/diagnostics/interface/getInterfaceNames",
+        api_info.api_url, api_info.port
+    );
 
     let mut headers = HeaderMap::new();
     headers.insert(ACCEPT, "application/json".parse().unwrap());
@@ -105,17 +115,23 @@ pub async fn get_interface_names(database: State<'_, Database>) -> Result<Interf
     )
     .await?;
 
-    response.json::<InterfaceNames>().await
+    response
+        .json::<InterfaceNames>()
+        .await
         .map_err(|e| format!("Failed to parse interface names: {}", e))
 }
 
 #[tauri::command]
 pub async fn get_firewall_logs(database: State<'_, Database>) -> Result<Vec<FirewallLog>, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
-    let url = format!("{}:{}/api/diagnostics/firewall/log", api_info.api_url, api_info.port);
+    let url = format!(
+        "{}:{}/api/diagnostics/firewall/log",
+        api_info.api_url, api_info.port
+    );
 
     let mut headers = HeaderMap::new();
     headers.insert(ACCEPT, "application/json".parse().unwrap());
@@ -131,15 +147,24 @@ pub async fn get_firewall_logs(database: State<'_, Database>) -> Result<Vec<Fire
     )
     .await?;
 
-    let response_text = response.text().await
+    let response_text = response
+        .text()
+        .await
         .map_err(|e| format!("Failed to get response text: {}", e))?;
 
     match serde_json::from_str::<Vec<FirewallLog>>(&response_text) {
         Ok(logs) => Ok(logs),
         Err(e) => {
             error!("Failed to parse logs: {}", e);
-            error!("First 1000 chars of response: {}", &response_text.chars().take(1000).collect::<String>());
-            Err(format!("Failed to parse logs: {}. First 1000 chars of response: {}", e, &response_text.chars().take(1000).collect::<String>()))
+            error!(
+                "First 1000 chars of response: {}",
+                &response_text.chars().take(1000).collect::<String>()
+            );
+            Err(format!(
+                "Failed to parse logs: {}. First 1000 chars of response: {}",
+                e,
+                &response_text.chars().take(1000).collect::<String>()
+            ))
         }
     }
 }
@@ -149,13 +174,13 @@ pub fn apply_filters(
     logs: Vec<FirewallLog>,
     action: String,
     interface: String,
-    direction: String
+    direction: String,
 ) -> Vec<FirewallLog> {
     logs.into_iter()
         .filter(|log| {
-            (action.is_empty() || log.action == Some(action.clone())) &&
-            (interface.is_empty() || log.interface == Some(interface.clone())) &&
-            (direction.is_empty() || log.dir == Some(direction.clone()))
+            (action.is_empty() || log.action == Some(action.clone()))
+                && (interface.is_empty() || log.interface == Some(interface.clone()))
+                && (direction.is_empty() || log.dir == Some(direction.clone()))
         })
         .collect()
 }

@@ -1,8 +1,8 @@
-use tauri::State;
-use serde::{Serialize, Deserialize};
 use crate::db::Database;
 use crate::http_client::make_http_request;
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
+use serde::{Deserialize, Serialize};
+use tauri::State;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RebootResponse {
@@ -15,7 +15,8 @@ fn build_api_url(api_info: &crate::db::ApiInfo, endpoint: &str) -> String {
 
 #[tauri::command]
 pub async fn reboot_firewall(database: State<'_, Database>) -> Result<RebootResponse, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
@@ -23,7 +24,6 @@ pub async fn reboot_firewall(database: State<'_, Database>) -> Result<RebootResp
 
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-    // Add other headers if needed
 
     let response = make_http_request(
         "POST",
@@ -36,6 +36,8 @@ pub async fn reboot_firewall(database: State<'_, Database>) -> Result<RebootResp
     )
     .await?;
 
-    response.json::<RebootResponse>().await
+    response
+        .json::<RebootResponse>()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))
 }

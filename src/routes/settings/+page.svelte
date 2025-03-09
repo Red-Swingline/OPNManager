@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from "@tauri-apps/api/core";
+  import { goto } from "$app/navigation";
   import AppLayout from '../AppLayout.svelte';
   import SettingsForm from '$lib/components/forms/SettingsForm.svelte';
   import Login from '$lib/components/forms/Login.svelte';
@@ -17,6 +18,7 @@
   let confirmNewPin = "";
   let activeTab: 'api' | 'pin' = 'api';
   let isFirstRun = false;
+  let isUpdatingPin = false;
 
   onMount(async () => {
     if ($authStore.isLoggedIn) {
@@ -64,6 +66,8 @@
   }
 
   async function handlePinSubmit() {
+    if (isUpdatingPin) return; // Prevent multiple submissions
+    
     if (newPin !== confirmNewPin) {
       toasts.error("New PINs do not match.");
       return;
@@ -74,20 +78,46 @@
       return;
     }
 
+    isUpdatingPin = true; // Set this before the async operation
+    
     try {
-      await invoke("update_pin", { currentPin, newPin, confirmNewPin });
-      toasts.success("PIN updated successfully!");
-      currentPin = "";
-      newPin = "";
-      confirmNewPin = "";
+      // Use setTimeout to give the UI a chance to update before starting the CPU-intensive operation
+      setTimeout(async () => {
+        try {
+          await invoke("update_pin", { currentPin, newPin, confirmNewPin });
+          
+          // Clear form values
+          currentPin = "";
+          newPin = "";
+          confirmNewPin = "";
+          
+          toasts.success("PIN updated successfully! Please log in with your new PIN.");
+          
+          // Give the UI time to show the success message
+          setTimeout(() => {
+            handleLogout();
+          }, 1500);
+        } catch (error) {
+          console.error("Failed to update PIN:", error);
+          isUpdatingPin = false; // Important to reset this in case of error
+          
+          if (error instanceof Error) {
+            toasts.error(error.message);
+          } else {
+            toasts.error("An unknown error occurred.");
+          }
+        }
+      }, 50); // Small delay to allow the UI to update first
     } catch (error) {
-      console.error("Failed to update PIN:", error);
-      if (error instanceof Error) {
-        toasts.error(error.message);
-      } else {
-        toasts.error("An unknown error occurred.");
-      }
+      isUpdatingPin = false; // Reset in case of error
+      console.error("Unexpected error:", error);
+      toasts.error("An unexpected error occurred.");
     }
+  }
+
+  function handleLogout() {
+    authStore.logout();
+    goto('/');
   }
 
   function setActiveTab(tab: 'api' | 'pin') {
@@ -114,6 +144,7 @@
             type="button"
             class="tab {activeTab === 'api' ? 'tab-active' : ''}" 
             on:click={() => setActiveTab('api')}
+            disabled={isUpdatingPin}
           >
             API Settings
           </button>
@@ -121,6 +152,7 @@
             type="button"
             class="tab {activeTab === 'pin' ? 'tab-active' : ''}" 
             on:click={() => setActiveTab('pin')}
+            disabled={isUpdatingPin}
           >
             Change PIN
           </button>
@@ -161,6 +193,7 @@
                 placeholder="Enter current PIN"
                 class="input input-bordered w-full"
                 required
+                disabled={isUpdatingPin}
               />
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -177,6 +210,7 @@
                   placeholder="Enter new PIN"
                   class="input input-bordered w-full"
                   required
+                  disabled={isUpdatingPin}
                 />
               </div>
               <div class="form-control">
@@ -192,12 +226,26 @@
                   placeholder="Confirm new PIN"
                   class="input input-bordered w-full"
                   required
+                  disabled={isUpdatingPin}
                 />
               </div>
             </div>
             <div class="flex justify-end mt-6">
-              <button type="submit" class="btn btn-primary">Update PIN</button>
+              <button type="submit" class="btn btn-primary" disabled={isUpdatingPin}>
+                {#if isUpdatingPin}
+                  <span class="loading loading-spinner loading-sm mr-2"></span>
+                  Updating PIN...
+                {:else}
+                  Update PIN
+                {/if}
+              </button>
             </div>
+            
+            {#if isUpdatingPin}
+              <div class="mt-4 text-sm text-info">
+                <p>PIN update in progress. This might take a moment. Please wait...</p>
+              </div>
+            {/if}
           </form>
         </div>
       {/if}

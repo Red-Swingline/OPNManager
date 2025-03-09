@@ -1,8 +1,7 @@
-use tauri::State;
 use crate::db::Database;
 use crate::http_client::make_http_request;
-use serde::{Serialize, Deserialize};
-
+use serde::{Deserialize, Serialize};
+use tauri::State;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GatewayStatus {
@@ -39,21 +38,23 @@ pub struct Service {
     name: String,
 }
 
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RestartServiceResponse {
     result: String,
 }
 
-
 #[tauri::command]
 pub async fn get_gateway_status(database: State<'_, Database>) -> Result<GatewayStatus, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
-    let url = format!("{}:{}/api/routes/gateway/status", api_info.api_url, api_info.port);
-    
+    let url = format!(
+        "{}:{}/api/routes/gateway/status",
+        api_info.api_url, api_info.port
+    );
+
     let response = make_http_request(
         "GET",
         &url,
@@ -65,18 +66,24 @@ pub async fn get_gateway_status(database: State<'_, Database>) -> Result<Gateway
     )
     .await?;
 
-    response.json::<GatewayStatus>().await
+    response
+        .json::<GatewayStatus>()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
 #[tauri::command]
 pub async fn get_services(database: State<'_, Database>) -> Result<ServicesResponse, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
-    let url = format!("{}:{}/api/core/service/search", api_info.api_url, api_info.port);
-    
+    let url = format!(
+        "{}:{}/api/core/service/search",
+        api_info.api_url, api_info.port
+    );
+
     let response = make_http_request(
         "GET",
         &url,
@@ -88,18 +95,27 @@ pub async fn get_services(database: State<'_, Database>) -> Result<ServicesRespo
     )
     .await?;
 
-    response.json::<ServicesResponse>().await
+    response
+        .json::<ServicesResponse>()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
 #[tauri::command]
-pub async fn restart_service(database: State<'_, Database>, service_id: String) -> Result<RestartServiceResponse, String> {
-    let api_info = database.get_default_api_info()
+pub async fn restart_service(
+    database: State<'_, Database>,
+    service_id: String,
+) -> Result<RestartServiceResponse, String> {
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
-    let url = format!("{}:{}/api/core/service/restart/{}", api_info.api_url, api_info.port, service_id);
-    
+    let url = format!(
+        "{}:{}/api/core/service/restart/{}",
+        api_info.api_url, api_info.port, service_id
+    );
+
     let response = make_http_request(
         "POST",
         &url,
@@ -111,6 +127,8 @@ pub async fn restart_service(database: State<'_, Database>, service_id: String) 
     )
     .await?;
 
-    response.json::<RestartServiceResponse>().await
+    response
+        .json::<RestartServiceResponse>()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))
 }

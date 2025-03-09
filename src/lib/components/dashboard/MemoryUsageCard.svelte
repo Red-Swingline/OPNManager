@@ -14,7 +14,7 @@
   <div class="card bg-base-100 shadow-xl">
     <div class="card-body">
       <h3 class="card-title text-lg flex items-center gap-2">
-        <svg class="w-5 h-5 text-primary" viewBox="0 0 24 24">
+        <svg class="w-5 h-5 text-indigo-500" viewBox="0 0 24 24">
           <path fill="currentColor" d={mdiServer} />
         </svg>
         Memory Usage
@@ -22,7 +22,7 @@
       <div class="divider my-2"></div>
       <div class="flex items-center justify-between">
         <div 
-          class="radial-progress text-primary" 
+          class="radial-progress text-indigo-500" 
           style="--value:{Math.round((systemResources.memory.used / parseInt(systemResources.memory.total)) * 100)}; --size:4rem; --thickness: 8px;" 
           role="progressbar"
         >

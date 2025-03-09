@@ -1,8 +1,9 @@
+use crate::db::{ApiInfo, Database};
+use crate::http_client::make_http_request;
+use crate::pin_cache::PinCache;
+use log::{error, info};
 use serde::Deserialize;
 use tauri::State;
-use crate::db::{Database, ApiInfo};
-use crate::http_client::make_http_request;
-use log::{info, error};
 
 #[tauri::command]
 pub async fn get_vendor_info(mac: String) -> Result<String, String> {
@@ -12,21 +13,23 @@ pub async fn get_vendor_info(mac: String) -> Result<String, String> {
     match make_http_request("GET", &url, None, None, Some(30), None, None).await {
         Ok(response) => {
             if response.status().is_success() {
-                Ok(response.text().await.unwrap_or_else(|_| "Unknown".to_string()))
+                Ok(response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown".to_string()))
             } else if response.status().as_u16() == 404 {
                 Ok("Unknown".to_string())
             } else {
                 Err(format!("Failed to get vendor info: {}", response.status()))
             }
-        },
-        Err(e) => Err(format!("Failed to get vendor info: {}", e))
+        }
+        Err(e) => Err(format!("Failed to get vendor info: {}", e)),
     }
 }
 
 #[tauri::command]
 pub fn check_first_run(database: State<Database>) -> Result<bool, String> {
-    database.is_first_run()
-        .map_err(|e| e.to_string())
+    database.is_first_run().map_err(|e| e.to_string())
 }
 
 #[derive(Deserialize)]
@@ -42,50 +45,49 @@ pub struct InitialConfig {
 #[tauri::command]
 pub async fn save_initial_config(
     config: InitialConfig,
-    database: State<'_, Database>
+    database: State<'_, Database>,
+    pin_cache: State<'_, PinCache>,
 ) -> Result<(), String> {
     info!("Starting save_initial_config");
 
     info!("Hashing password");
-    let password_hash = Database::hash_password(&config.pin)
-        .map_err(|e| {
-            error!("Failed to hash password: {}", e);
-            format!("Failed to hash password: {}", e)
-        })?;
+    let password_hash = Database::hash_password(&config.pin).map_err(|e| {
+        error!("Failed to hash password: {}", e);
+        format!("Failed to hash password: {}", e)
+    })?;
 
     info!("Updating password hash");
-    database.update_password_hash(&password_hash)
-        .map_err(|e| {
-            error!("Failed to save password hash: {}", e);
-            format!("Failed to save password hash: {}", e)
-        })?;
+    database.update_password_hash(&password_hash).map_err(|e| {
+        error!("Failed to save password hash: {}", e);
+        format!("Failed to save password hash: {}", e)
+    })?;
+
+    pin_cache.set_pin(config.pin.clone());
 
     info!("Creating ApiInfo");
     let api_info = ApiInfo {
-        id: 0, 
+        id: 0,
         profile_name: config.profile_name,
         api_key: config.api_key,
         api_secret: config.api_secret,
         api_url: config.api_url,
         port: config.port,
-        is_default: true, 
+        is_default: true,
     };
 
     info!("Saving API info");
-    database.save_api_info(&api_info)
-        .map_err(|e| {
-            error!("Failed to save API info: {}", e);
-            format!("Failed to save API info: {}", e)
-        })?;
+    database.save_initial_api_info(&api_info).map_err(|e| {
+        error!("Failed to save API info: {}", e);
+        format!("Failed to save API info: {}", e)
+    })?;
 
     info!("API info saved successfully");
 
     info!("Setting has_run flag");
-    database.set_has_run()
-        .map_err(|e| {
-            error!("Failed to set has_run flag: {}", e);
-            format!("Failed to set has_run flag: {}", e)
-        })?;
+    database.set_has_run().map_err(|e| {
+        error!("Failed to set has_run flag: {}", e);
+        format!("Failed to set has_run flag: {}", e)
+    })?;
 
     info!("Has_run flag set successfully");
     info!("save_initial_config completed successfully");
@@ -93,20 +95,14 @@ pub async fn save_initial_config(
 }
 
 #[tauri::command]
-pub fn verify_pin(pin: String, database: State<Database>) -> Result<bool, String> {
-    database.verify_pin(&pin)
-        .map_err(|e| format!("Failed to verify PIN: {}", e))
-}
-
-#[tauri::command]
 pub fn get_api_info(database: State<Database>) -> Result<Option<ApiInfo>, String> {
-    database.get_default_api_info()
-        .map_err(|e| e.to_string())
+    database.get_default_api_info().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn get_api_profiles(database: State<Database>) -> Result<Vec<ApiInfo>, String> {
-    database.list_api_profiles()
+    database
+        .list_api_profiles()
         .map_err(|e| format!("Failed to get API profiles: {}", e))
 }
 
@@ -118,9 +114,10 @@ pub fn update_api_info(
     api_url: String,
     port: u16,
     is_default: bool,
-    database: State<Database>
+    database: State<Database>,
 ) -> Result<(), String> {
-    let mut api_info = database.get_api_info(Some(&profile_name))
+    let mut api_info = database
+        .get_api_info(Some(&profile_name))
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("API profile '{}' not found", profile_name))?;
 
@@ -130,11 +127,13 @@ pub fn update_api_info(
     api_info.port = port;
     api_info.is_default = is_default;
 
-    database.save_api_info(&api_info)
+    database
+        .save_api_info(&api_info)
         .map_err(|e| e.to_string())?;
 
     if is_default {
-        database.set_default_profile(&profile_name)
+        database
+            .set_default_profile(&profile_name)
             .map_err(|e| format!("Failed to set default profile: {}", e))?;
     }
 
@@ -142,21 +141,21 @@ pub fn update_api_info(
 }
 
 #[tauri::command]
-pub fn update_pin(current_pin: String, new_pin: String, confirm_new_pin: String, database: State<Database>) -> Result<(), String> {
-    if !database.verify_pin(&current_pin)
-        .map_err(|e| format!("Failed to verify current PIN: {}", e))? {
-        return Err("Current PIN is incorrect".to_string());
-    }
-
+pub fn update_pin(
+    current_pin: String,
+    new_pin: String,
+    confirm_new_pin: String,
+    database: State<Database>,
+    pin_cache: State<PinCache>,
+) -> Result<(), String> {
     if new_pin != confirm_new_pin {
         return Err("New PIN and confirmation do not match".to_string());
     }
 
-    let password_hash = Database::hash_password(&new_pin)
-        .map_err(|e| e.to_string())?;
+    let result = database.update_pin(&current_pin, &new_pin)?;
+    pin_cache.set_pin(new_pin);
 
-    database.update_password_hash(&password_hash)
-        .map_err(|e| e.to_string())
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -171,26 +170,25 @@ pub struct NewApiProfile {
 #[tauri::command]
 pub async fn add_api_profile(
     profile: NewApiProfile,
-    database: State<'_, Database>
+    database: State<'_, Database>,
 ) -> Result<(), String> {
     info!("Starting add_api_profile");
 
     let api_info = ApiInfo {
-        id: 0, 
+        id: 0,
         profile_name: profile.profile_name,
         api_key: profile.api_key,
         api_secret: profile.api_secret,
         api_url: profile.api_url,
         port: profile.port,
-        is_default: false, // New profiles are not set as default
+        is_default: false,
     };
 
     info!("Saving new API profile");
-    database.save_api_info(&api_info)
-        .map_err(|e| {
-            error!("Failed to save API profile: {}", e);
-            format!("Failed to save API profile: {}", e)
-        })?;
+    database.save_api_info(&api_info).map_err(|e| {
+        error!("Failed to save API profile: {}", e);
+        format!("Failed to save API profile: {}", e)
+    })?;
 
     info!("New API profile saved successfully");
     Ok(())
@@ -200,31 +198,33 @@ pub async fn add_api_profile(
 pub fn delete_api_profile(profile_name: String, database: State<Database>) -> Result<(), String> {
     info!("Starting delete_api_profile for profile: {}", profile_name);
 
-
-    let profiles = database.list_api_profiles()
+    let profiles = database
+        .list_api_profiles()
         .map_err(|e| format!("Failed to list API profiles: {}", e))?;
-    
+
     if profiles.len() == 1 {
         return Err("Cannot delete the last profile".to_string());
     }
 
-    let is_default = profiles.iter().find(|p| p.profile_name == profile_name)
+    let is_default = profiles
+        .iter()
+        .find(|p| p.profile_name == profile_name)
         .map(|p| p.is_default)
         .unwrap_or(false);
 
-    database.delete_api_profile(&profile_name)
-        .map_err(|e| {
-            error!("Failed to delete API profile: {}", e);
-            format!("Failed to delete API profile: {}", e)
-        })?;
-
+    database.delete_api_profile(&profile_name).map_err(|e| {
+        error!("Failed to delete API profile: {}", e);
+        format!("Failed to delete API profile: {}", e)
+    })?;
 
     if is_default {
-        let new_default = profiles.iter()
+        let new_default = profiles
+            .iter()
             .find(|p| p.profile_name != profile_name)
             .ok_or_else(|| "No other profile found to set as default".to_string())?;
-        
-        database.set_default_profile(&new_default.profile_name)
+
+        database
+            .set_default_profile(&new_default.profile_name)
             .map_err(|e| {
                 error!("Failed to set new default profile: {}", e);
                 format!("Failed to set new default profile: {}", e)
@@ -238,9 +238,8 @@ pub fn delete_api_profile(profile_name: String, database: State<Database>) -> Re
 #[tauri::command]
 pub fn set_default_profile(profile_name: String, database: State<Database>) -> Result<(), String> {
     info!("Setting default profile: {}", profile_name);
-    database.set_default_profile(&profile_name)
-        .map_err(|e| {
-            error!("Failed to set default profile: {}", e);
-            format!("Failed to set default profile: {}", e)
-        })
+    database.set_default_profile(&profile_name).map_err(|e| {
+        error!("Failed to set default profile: {}", e);
+        format!("Failed to set default profile: {}", e)
+    })
 }

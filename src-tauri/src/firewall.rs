@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use serde::{Serialize, Deserialize};
-use tauri::State;
 use crate::db::Database;
 use crate::http_client::make_http_request;
+use serde::{Deserialize, Serialize};
+use tauri::State;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FirewallRule {
@@ -51,14 +51,16 @@ pub struct AliasOrNetwork {
     pub items: HashMap<String, String>,
 }
 
-
 fn build_api_url(api_info: &crate::db::ApiInfo, endpoint: &str) -> String {
     format!("{}:{}{}", api_info.api_url, api_info.port, endpoint)
 }
 
 #[tauri::command]
-pub async fn get_firewall_rules(database: State<'_, Database>) -> Result<FirewallRulesResponse, String> {
-    let api_info = database.get_default_api_info()
+pub async fn get_firewall_rules(
+    database: State<'_, Database>,
+) -> Result<FirewallRulesResponse, String> {
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
@@ -82,17 +84,26 @@ pub async fn get_firewall_rules(database: State<'_, Database>) -> Result<Firewal
     )
     .await?;
 
-    response.json::<FirewallRulesResponse>().await
+    response
+        .json::<FirewallRulesResponse>()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
 #[tauri::command]
-pub async fn toggle_firewall_rule(database: State<'_, Database>, uuid: String) -> Result<ToggleRuleResponse, String> {
-    let api_info = database.get_default_api_info()
+pub async fn toggle_firewall_rule(
+    database: State<'_, Database>,
+    uuid: String,
+) -> Result<ToggleRuleResponse, String> {
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
-    let toggle_url = build_api_url(&api_info, &format!("/api/firewall/filter/toggleRule/{}", uuid));
+    let toggle_url = build_api_url(
+        &api_info,
+        &format!("/api/firewall/filter/toggleRule/{}", uuid),
+    );
 
     let toggle_response = make_http_request(
         "POST",
@@ -105,13 +116,18 @@ pub async fn toggle_firewall_rule(database: State<'_, Database>, uuid: String) -
     )
     .await?;
 
-    toggle_response.json::<ToggleRuleResponse>().await
+    toggle_response
+        .json::<ToggleRuleResponse>()
+        .await
         .map_err(|e| format!("Failed to parse toggle response: {}", e))
 }
 
 #[tauri::command]
-pub async fn apply_firewall_changes(database: State<'_, Database>) -> Result<ApplyResponse, String> {
-    let api_info = database.get_default_api_info()
+pub async fn apply_firewall_changes(
+    database: State<'_, Database>,
+) -> Result<ApplyResponse, String> {
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
@@ -128,13 +144,16 @@ pub async fn apply_firewall_changes(database: State<'_, Database>) -> Result<App
     )
     .await?;
 
-    apply_response.json::<ApplyResponse>().await
+    apply_response
+        .json::<ApplyResponse>()
+        .await
         .map_err(|e| format!("Failed to parse apply response: {}", e))
 }
 
 #[tauri::command]
 pub async fn get_rule_template(database: State<'_, Database>) -> Result<serde_json::Value, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
@@ -151,16 +170,19 @@ pub async fn get_rule_template(database: State<'_, Database>) -> Result<serde_js
     )
     .await?;
 
-    response.json::<serde_json::Value>().await
+    response
+        .json::<serde_json::Value>()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
 #[tauri::command]
 pub async fn add_firewall_rule(
-    database: State<'_, Database>, 
-    rule_data: serde_json::Value
+    database: State<'_, Database>,
+    rule_data: serde_json::Value,
 ) -> Result<AddRuleResponse, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
@@ -177,10 +199,10 @@ pub async fn add_firewall_rule(
     )
     .await?;
 
-    let add_result = response.json::<AddRuleResponse>().await
+    let add_result = response
+        .json::<AddRuleResponse>()
+        .await
         .map_err(|e| format!("Failed to parse add rule response: {}", e))?;
-    
-    // If the rule was added successfully, apply the changes
     if add_result.result == "saved" {
         apply_firewall_changes(database).await?;
     }
@@ -189,12 +211,19 @@ pub async fn add_firewall_rule(
 }
 
 #[tauri::command]
-pub async fn delete_firewall_rule(database: State<'_, Database>, uuid: String) -> Result<serde_json::Value, String> {
-    let api_info = database.get_default_api_info()
+pub async fn delete_firewall_rule(
+    database: State<'_, Database>,
+    uuid: String,
+) -> Result<serde_json::Value, String> {
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
-    let url = build_api_url(&api_info, &format!("/api/firewall/filter/del_rule/{}", uuid));
+    let url = build_api_url(
+        &api_info,
+        &format!("/api/firewall/filter/del_rule/{}", uuid),
+    );
 
     let response = make_http_request(
         "POST",
@@ -207,23 +236,29 @@ pub async fn delete_firewall_rule(database: State<'_, Database>, uuid: String) -
     )
     .await?;
 
-    let result = response.json::<serde_json::Value>().await
+    let result = response
+        .json::<serde_json::Value>()
+        .await
         .map_err(|e| format!("Failed to parse delete rule response: {}", e))?;
-    
-    // Apply the changes to make them take effect
+
     apply_firewall_changes(database).await?;
-    
+
     Ok(result)
 }
 
-
 #[tauri::command]
-pub async fn list_network_select_options(database: State<'_, Database>) -> Result<NetworkSelectOptions, String> {
-    let api_info = database.get_default_api_info()
+pub async fn list_network_select_options(
+    database: State<'_, Database>,
+) -> Result<NetworkSelectOptions, String> {
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
-    let url = build_api_url(&api_info, "/api/firewall/filter/list_network_select_options");
+    let url = build_api_url(
+        &api_info,
+        "/api/firewall/filter/list_network_select_options",
+    );
 
     let response = make_http_request(
         "GET",
@@ -236,17 +271,26 @@ pub async fn list_network_select_options(database: State<'_, Database>) -> Resul
     )
     .await?;
 
-    response.json::<NetworkSelectOptions>().await
+    response
+        .json::<NetworkSelectOptions>()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
 #[tauri::command]
-pub async fn get_rule(database: State<'_, Database>, uuid: String) -> Result<serde_json::Value, String> {
-    let api_info = database.get_default_api_info()
+pub async fn get_rule(
+    database: State<'_, Database>,
+    uuid: String,
+) -> Result<serde_json::Value, String> {
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
-    let url = build_api_url(&api_info, &format!("/api/firewall/filter/get_rule/{}", uuid));
+    let url = build_api_url(
+        &api_info,
+        &format!("/api/firewall/filter/get_rule/{}", uuid),
+    );
 
     let response = make_http_request(
         "GET",
@@ -259,21 +303,27 @@ pub async fn get_rule(database: State<'_, Database>, uuid: String) -> Result<ser
     )
     .await?;
 
-    response.json::<serde_json::Value>().await
+    response
+        .json::<serde_json::Value>()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
 #[tauri::command]
 pub async fn set_rule(
-    database: State<'_, Database>, 
+    database: State<'_, Database>,
     uuid: String,
-    rule_data: serde_json::Value
+    rule_data: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
-    let url = build_api_url(&api_info, &format!("/api/firewall/filter/set_rule/{}", uuid));
+    let url = build_api_url(
+        &api_info,
+        &format!("/api/firewall/filter/set_rule/{}", uuid),
+    );
 
     let response = make_http_request(
         "POST",
@@ -286,11 +336,12 @@ pub async fn set_rule(
     )
     .await?;
 
-    let result = response.json::<serde_json::Value>().await
+    let result = response
+        .json::<serde_json::Value>()
+        .await
         .map_err(|e| format!("Failed to parse set rule response: {}", e))?;
-    
-    // Apply the changes to make them take effect
+
     apply_firewall_changes(database).await?;
-    
+
     Ok(result)
 }

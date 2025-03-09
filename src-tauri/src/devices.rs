@@ -1,8 +1,8 @@
-use serde::{Serialize, Deserialize};
-use serde_json::json;
-use tauri::State;
 use crate::db::Database;
 use crate::http_client::make_http_request;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use tauri::State;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Device {
@@ -30,7 +30,8 @@ fn build_api_url(api_info: &crate::db::ApiInfo, endpoint: &str) -> String {
 
 #[tauri::command]
 pub async fn get_devices(database: State<'_, Database>) -> Result<Vec<Device>, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
@@ -47,13 +48,16 @@ pub async fn get_devices(database: State<'_, Database>) -> Result<Vec<Device>, S
     )
     .await?;
 
-    response.json::<Vec<Device>>().await
+    response
+        .json::<Vec<Device>>()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
 #[tauri::command]
 pub async fn flush_arp_table(database: State<'_, Database>) -> Result<FlushArpResponse, String> {
-    let api_info = database.get_default_api_info()
+    let api_info = database
+        .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
@@ -62,7 +66,7 @@ pub async fn flush_arp_table(database: State<'_, Database>) -> Result<FlushArpRe
     let response = make_http_request(
         "POST",
         &url,
-        Some(json!({})),  // Empty JSON object as payload
+        Some(json!({})), // Empty JSON object as payload
         None,
         Some(30),
         Some(&api_info.api_key),
@@ -70,7 +74,9 @@ pub async fn flush_arp_table(database: State<'_, Database>) -> Result<FlushArpRe
     )
     .await?;
 
-    let body = response.text().await
+    let body = response
+        .text()
+        .await
         .map_err(|e| format!("Failed to get response body: {}", e))?;
 
     let deleted: Vec<String> = body
