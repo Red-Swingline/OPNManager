@@ -12,6 +12,7 @@
     mdiThemeLightDark,
     mdiTextBoxSearch,
     mdiMapMarkerPath,
+    mdiDnsOutline,
   } from "@mdi/js";
   import { goto } from "$app/navigation";
   import { authStore } from "$lib/stores/authStore";
@@ -31,10 +32,10 @@
     { path: "/routes", icon: mdiMapMarkerPath, label: "Routes" },
     { path: "/rules", icon: mdiWallFire, label: "Firewall Rules" },
     { path: "/logs", icon: mdiTextBoxSearch, label: "Firewall Logs" },
+    { path: "/unbound", icon: mdiDnsOutline, label: "DNS Blocklist" },
     { path: "/updates", icon: mdiUpdate, label: "Updates" },
     { path: "/settings", icon: mdiCog, label: "Settings" },
   ];
-
   function toggleSidebar() {
     isSidebarOpen = !isSidebarOpen;
   }

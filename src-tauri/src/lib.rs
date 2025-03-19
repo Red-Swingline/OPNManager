@@ -11,6 +11,7 @@ mod power;
 mod routes;
 mod system_resources;
 mod traffic;
+mod unbound;
 mod update_checker;
 
 use db::Database;
@@ -101,6 +102,13 @@ pub fn run() {
             update_checker::start_update,
             system_resources::get_system_resources,
             system_resources::get_system_disk,
+            unbound::get_unbound_settings,
+            unbound::set_dnsbl_settings,
+            unbound::apply_dnsbl_settings,
+            unbound::get_dnsbl_cron_job,
+            unbound::add_dnsbl_cron_job,
+            unbound::delete_dnsbl_cron_job,
+            unbound::apply_cron_changes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
