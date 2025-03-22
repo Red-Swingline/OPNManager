@@ -13,6 +13,8 @@
     mdiTextBoxSearch,
     mdiMapMarkerPath,
     mdiDnsOutline,
+    mdiChevronDown,
+    mdiChevronUp,
   } from "@mdi/js";
   import { goto } from "$app/navigation";
   import { authStore } from "$lib/stores/authStore";
@@ -24,6 +26,7 @@
   let isSidebarOpen = false;
   let isRebootDialogOpen = false;
   let theme = "light";
+  let expandedCategories = { unbound: false };
 
   const menuItems = [
     { path: "/", icon: mdiHome, label: "Home" },
@@ -32,18 +35,27 @@
     { path: "/routes", icon: mdiMapMarkerPath, label: "Routes" },
     { path: "/rules", icon: mdiWallFire, label: "Firewall Rules" },
     { path: "/logs", icon: mdiTextBoxSearch, label: "Firewall Logs" },
-    { path: "/unbound", icon: mdiDnsOutline, label: "DNS Blocklist" },
+    { 
+      category: "unbound", 
+      icon: mdiDnsOutline, 
+      label: "Unbound",
+      items: [
+        { path: "/unbound", icon: mdiDnsOutline, label: "DNS Blocklist" }
+      ]
+    },
     { path: "/updates", icon: mdiUpdate, label: "Updates" },
     { path: "/settings", icon: mdiCog, label: "Settings" },
   ];
+  
   function toggleSidebar() {
     isSidebarOpen = !isSidebarOpen;
   }
 
   function handleLogout() {
-  goto('/logout');
-  isSidebarOpen = false;
-}
+    goto('/logout');
+    isSidebarOpen = false;
+  }
+  
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === "Enter" || event.key === " ") {
       toggleSidebar();
@@ -61,6 +73,10 @@
       goto(path);
     }
     isSidebarOpen = false;
+  }
+
+  function toggleCategory(category: string) {
+    expandedCategories[category] = !expandedCategories[category];
   }
 
   function openRebootDialog() {
@@ -90,6 +106,11 @@
     theme = theme === "light" ? "dark" : "light";
     document.documentElement.setAttribute("data-theme", theme);
   }
+
+  // Check if the current page is in a category or its items
+  function isInCategory(category) {
+    return category.items && category.items.some(item => $page.url.pathname === item.path);
+  }
 </script>
 
 <div class="flex h-screen bg-base-200">
@@ -101,18 +122,57 @@
     <nav class="flex-1 overflow-y-auto">
       <ul class="p-2 space-y-2">
         {#each menuItems as item}
-          <li>
-            <button
-              on:click={() => handleNavigation(item.path)}
-              class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
-              class:bg-base-300={$page.url.pathname === item.path}
-            >
-              <svg class="w-6 h-6" viewBox="0 0 24 24">
-                <path fill="currentColor" d={item.icon} />
-              </svg>
-              <span>{item.label}</span>
-            </button>
-          </li>
+          {#if item.category}
+            <li>
+              <button
+                on:click={() => toggleCategory(item.category)}
+                class="flex items-center justify-between w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
+                class:bg-base-300={isInCategory(item) || expandedCategories[item.category]}
+                aria-expanded={expandedCategories[item.category]}
+              >
+                <div class="flex items-center space-x-3">
+                  <svg class="w-6 h-6" viewBox="0 0 24 24">
+                    <path fill="currentColor" d={item.icon} />
+                  </svg>
+                  <span>{item.label}</span>
+                </div>
+                <svg class="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="currentColor" d={expandedCategories[item.category] ? mdiChevronUp : mdiChevronDown} />
+                </svg>
+              </button>
+              {#if expandedCategories[item.category]}
+                <ul class="pl-8 mt-1 space-y-1">
+                  {#each item.items as subItem}
+                    <li>
+                      <button
+                        on:click={() => handleNavigation(subItem.path)}
+                        class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
+                        class:bg-base-300={$page.url.pathname === subItem.path}
+                      >
+                        <svg class="w-5 h-5" viewBox="0 0 24 24">
+                          <path fill="currentColor" d={subItem.icon} />
+                        </svg>
+                        <span>{subItem.label}</span>
+                      </button>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            </li>
+          {:else}
+            <li>
+              <button
+                on:click={() => handleNavigation(item.path)}
+                class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
+                class:bg-base-300={$page.url.pathname === item.path}
+              >
+                <svg class="w-6 h-6" viewBox="0 0 24 24">
+                  <path fill="currentColor" d={item.icon} />
+                </svg>
+                <span>{item.label}</span>
+              </button>
+            </li>
+          {/if}
         {/each}
         <li class="mt-auto">
           <button
@@ -199,18 +259,57 @@
       <nav class="mt-5">
         <ul class="p-2 space-y-2">
           {#each menuItems as item}
-            <li>
-              <button
-                on:click={() => handleNavigation(item.path)}
-                class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
-                class:bg-base-300={$page.url.pathname === item.path}
-              >
-                <svg class="w-6 h-6" viewBox="0 0 24 24">
-                  <path fill="currentColor" d={item.icon} />
-                </svg>
-                <span>{item.label}</span>
-              </button>
-            </li>
+            {#if item.category}
+              <li>
+                <button
+                  on:click={() => toggleCategory(item.category)}
+                  class="flex items-center justify-between w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
+                  class:bg-base-300={isInCategory(item) || expandedCategories[item.category]}
+                  aria-expanded={expandedCategories[item.category]}
+                >
+                  <div class="flex items-center space-x-3">
+                    <svg class="w-6 h-6" viewBox="0 0 24 24">
+                      <path fill="currentColor" d={item.icon} />
+                    </svg>
+                    <span>{item.label}</span>
+                  </div>
+                  <svg class="w-5 h-5" viewBox="0 0 24 24">
+                    <path fill="currentColor" d={expandedCategories[item.category] ? mdiChevronUp : mdiChevronDown} />
+                  </svg>
+                </button>
+                {#if expandedCategories[item.category]}
+                  <ul class="pl-8 mt-1 space-y-1">
+                    {#each item.items as subItem}
+                      <li>
+                        <button
+                          on:click={() => handleNavigation(subItem.path)}
+                          class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
+                          class:bg-base-300={$page.url.pathname === subItem.path}
+                        >
+                          <svg class="w-5 h-5" viewBox="0 0 24 24">
+                            <path fill="currentColor" d={subItem.icon} />
+                          </svg>
+                          <span>{subItem.label}</span>
+                        </button>
+                      </li>
+                    {/each}
+                  </ul>
+                {/if}
+              </li>
+            {:else}
+              <li>
+                <button
+                  on:click={() => handleNavigation(item.path)}
+                  class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
+                  class:bg-base-300={$page.url.pathname === item.path}
+                >
+                  <svg class="w-6 h-6" viewBox="0 0 24 24">
+                    <path fill="currentColor" d={item.icon} />
+                  </svg>
+                  <span>{item.label}</span>
+                </button>
+              </li>
+            {/if}
           {/each}
           <li class="mt-auto">
             <button

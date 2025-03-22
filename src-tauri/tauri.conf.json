@@ -1,6 +1,6 @@
 {
   "productName": "OPNManager",
-  "version": "3.0.10",
+  "version": "3.0.11",
   "identifier": "com.OPNManager.app",
   "build": {
     "beforeDevCommand": "npm run dev",
