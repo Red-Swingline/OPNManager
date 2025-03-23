@@ -1,4 +1,3 @@
-// src/lib/stores/dashboardStore.ts
 import { writable } from 'svelte/store';
 import { invoke } from "@tauri-apps/api/core";
 
@@ -8,7 +7,6 @@ export interface DashboardWidgetPref {
   position: number;
 }
 
-// Default widget configuration
 const DEFAULT_WIDGETS: DashboardWidgetPref[] = [
   { widget_key: 'uptime', visible: true, position: 0 },
   { widget_key: 'memory', visible: true, position: 1 },
@@ -32,13 +30,10 @@ function createDashboardStore() {
 
   return {
     subscribe,
-    
-    // Load preferences from database
     loadPreferences: async () => {
       try {
         const prefs = await invoke<Record<string, DashboardWidgetPref>>('get_dashboard_preferences');
-        
-        // If we have preferences in the database, use them
+
         if (prefs && Object.keys(prefs).length > 0) {
           update(state => ({
             ...state,
@@ -46,7 +41,6 @@ function createDashboardStore() {
             isLoaded: true
           }));
         } else {
-          // Otherwise use defaults but mark as loaded
           update(state => ({
             ...state,
             widgets: [...DEFAULT_WIDGETS],
@@ -55,7 +49,6 @@ function createDashboardStore() {
         }
       } catch (error) {
         console.error('Failed to load dashboard preferences:', error);
-        // Fallback to defaults if loading fails
         update(state => ({
           ...state,
           widgets: [...DEFAULT_WIDGETS],
@@ -63,8 +56,7 @@ function createDashboardStore() {
         }));
       }
     },
-    
-    // Save preferences to database
+
     savePreferences: async () => {
       try {
         let state;
@@ -72,7 +64,7 @@ function createDashboardStore() {
           state = s;
           return s;
         });
-        
+
         if (state.widgets) {
           await invoke('save_dashboard_preferences', { prefs: state.widgets });
           return true;
@@ -83,8 +75,7 @@ function createDashboardStore() {
         return false;
       }
     },
-    
-    // Toggle widget visibility
+
     toggleWidget: (key: string) => {
       update(state => {
         const widgets = state.widgets.map(widget => {
@@ -93,12 +84,11 @@ function createDashboardStore() {
           }
           return widget;
         });
-        
+
         return { ...state, widgets };
       });
     },
-    
-    // Update widget positions (e.g., after drag-and-drop)
+
     updatePositions: (orderedKeys: string[]) => {
       update(state => {
         const keyToWidget = new Map(state.widgets.map(w => [w.widget_key, w]));
@@ -107,31 +97,27 @@ function createDashboardStore() {
           if (widget) {
             return { ...widget, position: index };
           }
-          // This shouldn't happen if orderedKeys contains valid keys
           return null;
         }).filter(Boolean) as DashboardWidgetPref[];
-        
+
         return { ...state, widgets };
       });
     },
-    
-    // Reset to defaults
+
     resetToDefaults: () => {
       update(state => ({
         ...state,
         widgets: [...DEFAULT_WIDGETS]
       }));
     },
-    
-    // Toggle editing mode
+
     toggleEditMode: () => {
       update(state => ({
         ...state,
         isEditing: !state.isEditing
       }));
     },
-    
-    // Exit editing mode
+
     exitEditMode: () => {
       update(state => ({
         ...state,

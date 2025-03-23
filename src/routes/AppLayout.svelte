@@ -113,12 +113,9 @@
     theme = theme === "light" ? "dark" : "light";
     document.documentElement.setAttribute("data-theme", theme);
 
-    // Save theme preference
     localStorage.setItem("theme", theme);
 
-    // Force repaint on iOS
     if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
-      // Toggle a class on the header to force a repaint
       const header = document.querySelector("header.fixed-header");
       if (header) {
         header.classList.add("theme-updating");
@@ -129,7 +126,6 @@
     }
   }
 
-  // Check if the current page is in a category or its items
   function isInCategory(category) {
     return (
       category.items &&
@@ -138,12 +134,10 @@
   }
 
   onMount(() => {
-    // Initialize the theme from localStorage or use default
     const savedTheme = localStorage.getItem("theme") || "light";
     theme = savedTheme;
     document.documentElement.setAttribute("data-theme", theme);
 
-    // Initialize the iOS scroll manager
     const isIOS =
       /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     if (isIOS) {
@@ -151,7 +145,6 @@
     }
 
     return () => {
-      // Clean up when component is destroyed
       if (scrollManager && scrollManager.cleanup) {
         scrollManager.cleanup();
       }

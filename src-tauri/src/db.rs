@@ -8,7 +8,10 @@ use log::{error, info};
 use rusqlite::{params, types::Type, Connection, OptionalExtension, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 use tauri::Manager;
 
 use crate::pin_cache::PinCache;
@@ -1097,13 +1100,16 @@ impl Database {
 
         Ok(())
     }
-    pub fn get_dashboard_preferences(&self, profile_id: i64) -> Result<HashMap<String, DashboardWidgetPref>> {
+    pub fn get_dashboard_preferences(
+        &self,
+        profile_id: i64,
+    ) -> Result<HashMap<String, DashboardWidgetPref>> {
         let conn = self.conn.lock().unwrap();
-        
+
         let mut stmt = conn.prepare(
-            "SELECT widget_key, visible, position FROM dashboard_preferences WHERE profile_id = ?1"
+            "SELECT widget_key, visible, position FROM dashboard_preferences WHERE profile_id = ?1",
         )?;
-        
+
         let rows = stmt.query_map([profile_id], |row| {
             Ok(DashboardWidgetPref {
                 widget_key: row.get(0)?,
@@ -1111,26 +1117,30 @@ impl Database {
                 position: row.get(2)?,
             })
         })?;
-        
+
         let mut preferences = HashMap::new();
         for row_result in rows {
             let pref = row_result?;
             preferences.insert(pref.widget_key.clone(), pref);
         }
-        
+
         Ok(preferences)
     }
-    
-    pub fn save_dashboard_preferences(&self, profile_id: i64, preferences: &[DashboardWidgetPref]) -> Result<()> {
+
+    pub fn save_dashboard_preferences(
+        &self,
+        profile_id: i64,
+        preferences: &[DashboardWidgetPref],
+    ) -> Result<()> {
         let mut conn = self.conn.lock().unwrap();
         let tx = conn.transaction()?;
-        
+
         // Clear existing preferences for this profile
         tx.execute(
             "DELETE FROM dashboard_preferences WHERE profile_id = ?1",
             [profile_id],
         )?;
-        
+
         // Insert new preferences
         for pref in preferences {
             tx.execute(
@@ -1144,9 +1154,8 @@ impl Database {
                 ],
             )?;
         }
-        
+
         tx.commit()?;
         Ok(())
     }
-    
 }

@@ -2,18 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Add these overrides to your app.css file */
-
-/* Override primary color with CSS variables for DaisyUI */
 :root {
-    --p: 210 13% 27%; /* #3a4851 in hsl format */
-    --pf: 212 17% 21%; /* #2c373f in hsl format */
-    --pc: 0 0% 100%; /* white text */
-    
-    /* Secondary color - Teal */
-    --s: 178 36% 46%; /* #4A9D9A in hsl format */
-    --sf: 178 40% 40%; /* slightly darker for hover */
-    --sc: 0 0% 100%; /* white text */
+    --p: 210 13% 27%;
+    --pf: 212 17% 21%; 
+    --pc: 0 0% 100%; 
+
+    --s: 178 36% 46%; 
+    --sf: 178 40% 40%; 
+    --sc: 0 0% 100%;
   }
   
   /* Direct overrides for primary buttons */
@@ -180,5 +176,5 @@ header.fixed-header {
   background-color: var(--b1, var(--base-100));
   color: var(--bc, var(--base-content));
   -webkit-transform: translateZ(0);
-  transform: translateZ(0); /* Hardware acceleration */
+  transform: translateZ(0); 
 }
