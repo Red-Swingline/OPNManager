@@ -20,7 +20,7 @@
     mdiServer,
     mdiHarddisk,
     mdiViewDashboardEditOutline,
-    mdiClockOutline
+    mdiClockOutline,
   } from "@mdi/js";
 
   interface InterfaceData {
@@ -260,43 +260,52 @@
 
   function isWidgetVisible(key: string): boolean {
     if (!$dashboardStore.isLoaded) return true;
-    const widget = $dashboardStore.widgets.find(w => w.widget_key === key);
+    const widget = $dashboardStore.widgets.find((w) => w.widget_key === key);
     return widget ? widget.visible : true;
   }
 
   function getResourceWidgetOrder(): string[] {
     if (!$dashboardStore.isLoaded) {
-      return ['uptime', 'memory', 'disk', 'services'];
+      return ["uptime", "memory", "disk", "services"];
     }
-    
+
     return $dashboardStore.widgets
-      .filter(w => ['uptime', 'memory', 'disk', 'services'].includes(w.widget_key))
+      .filter((w) =>
+        ["uptime", "memory", "disk", "services"].includes(w.widget_key),
+      )
       .sort((a, b) => a.position - b.position)
-      .map(w => w.widget_key);
+      .map((w) => w.widget_key);
   }
 
   function getNetworkWidgetOrder(): string[] {
     if (!$dashboardStore.isLoaded) {
-      return ['traffic_graph', 'gateways', 'interfaces'];
+      return ["traffic_graph", "gateways", "interfaces"];
     }
-    
+
     return $dashboardStore.widgets
-      .filter(w => ['traffic_graph', 'gateways', 'interfaces'].includes(w.widget_key))
+      .filter((w) =>
+        ["traffic_graph", "gateways", "interfaces"].includes(w.widget_key),
+      )
       .sort((a, b) => a.position - b.position)
-      .map(w => w.widget_key);
+      .map((w) => w.widget_key);
   }
 
   function getAllWidgetsInOrder(): string[] {
     if (!$dashboardStore.isLoaded) {
       return [
-        'uptime', 'memory', 'disk', 'services',
-        'traffic_graph', 'gateways', 'interfaces'
+        "uptime",
+        "memory",
+        "disk",
+        "services",
+        "traffic_graph",
+        "gateways",
+        "interfaces",
       ];
     }
-    
+
     return $dashboardStore.widgets
       .sort((a, b) => a.position - b.position)
-      .map(w => w.widget_key);
+      .map((w) => w.widget_key);
   }
 </script>
 
@@ -325,9 +334,9 @@
     <div class="p-6 max-w-7xl mx-auto">
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-bold">Dashboard</h2>
-        
+
         <!-- Dashboard Edit Button -->
-        <button 
+        <button
           class="btn btn-outline btn-sm gap-2"
           on:click={toggleDashboardEditMode}
           class:btn-primary={$dashboardStore.isEditing}
@@ -349,7 +358,7 @@
         <div class="lg:hidden flex flex-col space-y-6">
           {#each getAllWidgetsInOrder() as widgetKey}
             {#if isWidgetVisible(widgetKey)}
-              {#if widgetKey === 'uptime' && dashboardData.systemTime}
+              {#if widgetKey === "uptime" && dashboardData.systemTime}
                 <div class="card bg-base-100 shadow-xl">
                   <div class="card-body">
                     <h3 class="card-title text-lg flex items-center gap-2">
@@ -358,39 +367,53 @@
                       </svg>
                       System Status
                     </h3>
-                    
+
                     <div class="divider my-2"></div>
-                    
+
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div class="space-y-3">
                         <div>
                           <h4 class="text-sm font-medium opacity-70">Uptime</h4>
-                          <p class="text-lg font-mono">{dashboardData.systemTime.uptime}</p>
+                          <p class="text-lg font-mono">
+                            {dashboardData.systemTime.uptime}
+                          </p>
                         </div>
-                        
+
                         <div>
-                          <h4 class="text-sm font-medium opacity-70">Load average</h4>
-                          <p class="text-lg font-mono">{dashboardData.systemTime.loadavg}</p>
+                          <h4 class="text-sm font-medium opacity-70">
+                            Load average
+                          </h4>
+                          <p class="text-lg font-mono">
+                            {dashboardData.systemTime.loadavg}
+                          </p>
                         </div>
                       </div>
-                      
+
                       <div class="space-y-3">
                         <div>
-                          <h4 class="text-sm font-medium opacity-70">Current date/time</h4>
-                          <p class="text-lg font-mono">{dashboardData.systemTime.datetime}</p>
+                          <h4 class="text-sm font-medium opacity-70">
+                            Current date/time
+                          </h4>
+                          <p class="text-lg font-mono">
+                            {dashboardData.systemTime.datetime}
+                          </p>
                         </div>
-                        
+
                         <div>
-                          <h4 class="text-sm font-medium opacity-70">Last configuration change</h4>
-                          <p class="text-lg font-mono">{dashboardData.systemTime.config}</p>
+                          <h4 class="text-sm font-medium opacity-70">
+                            Last configuration change
+                          </h4>
+                          <p class="text-lg font-mono">
+                            {dashboardData.systemTime.config}
+                          </p>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
               {/if}
-              
-              {#if widgetKey === 'memory' && dashboardData.systemResources}
+
+              {#if widgetKey === "memory" && dashboardData.systemResources}
                 <div class="card bg-base-100 shadow-xl">
                   <div class="card-body">
                     <h3 class="card-title text-lg flex items-center gap-2">
@@ -401,20 +424,20 @@
                     </h3>
                     <div class="divider my-2"></div>
                     <div class="flex items-center justify-between">
-                      <div 
-                        class="radial-progress text-indigo-500" 
-                        style="--value:{memoryUsagePercent}; --size:4rem; --thickness: 8px;" 
+                      <div
+                        class="radial-progress text-indigo-500"
+                        style="--value:{memoryUsagePercent}; --size:4rem; --thickness: 8px;"
                         role="progressbar"
                       >
                         {memoryUsagePercent}%
                       </div>
                       <div>
                         <p class="text-sm">
-                          <span class="font-semibold">Used:</span> 
+                          <span class="font-semibold">Used:</span>
                           {dashboardData.systemResources.memory.used_frmt}
                         </p>
                         <p class="text-sm">
-                          <span class="font-semibold">Total:</span> 
+                          <span class="font-semibold">Total:</span>
                           {dashboardData.systemResources.memory.total_frmt}
                         </p>
                       </div>
@@ -422,8 +445,8 @@
                   </div>
                 </div>
               {/if}
-              
-              {#if widgetKey === 'disk' && mainDisk}
+
+              {#if widgetKey === "disk" && mainDisk}
                 <div class="card bg-base-100 shadow-xl">
                   <div class="card-body">
                     <h3 class="card-title text-lg flex items-center gap-2">
@@ -434,24 +457,24 @@
                     </h3>
                     <div class="divider my-2"></div>
                     <div class="flex items-center justify-between">
-                      <div 
-                        class="radial-progress text-accent" 
-                        style="--value:{mainDisk.used_pct}; --size:4rem; --thickness: 8px;" 
+                      <div
+                        class="radial-progress text-accent"
+                        style="--value:{mainDisk.used_pct}; --size:4rem; --thickness: 8px;"
                         role="progressbar"
                       >
                         {mainDisk.used_pct}%
                       </div>
                       <div>
                         <p class="text-sm">
-                          <span class="font-semibold">Used:</span> 
+                          <span class="font-semibold">Used:</span>
                           {mainDisk.used}
                         </p>
                         <p class="text-sm">
-                          <span class="font-semibold">Available:</span> 
+                          <span class="font-semibold">Available:</span>
                           {mainDisk.available}
                         </p>
                         <p class="text-sm">
-                          <span class="font-semibold">Mountpoint:</span> 
+                          <span class="font-semibold">Mountpoint:</span>
                           {mainDisk.mountpoint}
                         </p>
                       </div>
@@ -459,8 +482,8 @@
                   </div>
                 </div>
               {/if}
-              
-              {#if widgetKey === 'services' && dashboardData.services}
+
+              {#if widgetKey === "services" && dashboardData.services}
                 <div class="card bg-base-100 shadow-xl">
                   <div class="card-body">
                     <div class="flex justify-between items-center">
@@ -473,14 +496,14 @@
                           {dashboardData.services.rows.length}
                         </span>
                       </h3>
-                      <button 
-                        class="btn btn-ghost btn-sm" 
+                      <button
+                        class="btn btn-ghost btn-sm"
                         on:click={toggleServicesExpansion}
                       >
                         <svg class="w-5 h-5" viewBox="0 0 24 24">
-                          <path 
-                            fill="currentColor" 
-                            d={expandedServices ? mdiChevronUp : mdiChevronDown} 
+                          <path
+                            fill="currentColor"
+                            d={expandedServices ? mdiChevronUp : mdiChevronDown}
                           />
                         </svg>
                       </button>
@@ -490,27 +513,39 @@
                       <div class="divider my-2"></div>
                       <div class="space-y-3">
                         {#each dashboardData.services.rows as service}
-                          <div 
-                            class="border rounded-lg p-3 
-                            {service.running ? 'bg-success/10 border-success/30' : 'bg-error/10 border-error/30'}"
+                          <div
+                            class="border rounded-lg p-3
+                            {service.running
+                              ? 'bg-success/10 border-success/30'
+                              : 'bg-error/10 border-error/30'}"
                           >
-                            <div class="grid grid-cols-[1fr,auto] gap-2 items-center">
+                            <div
+                              class="grid grid-cols-[1fr,auto] gap-2 items-center"
+                            >
                               <div class="min-w-0 overflow-hidden">
-                                <div class="font-medium truncate" title={service.name}>
+                                <div
+                                  class="font-medium truncate"
+                                  title={service.name}
+                                >
                                   {service.name}
                                 </div>
-                                <div class="text-sm opacity-70 truncate" title={service.description}>
+                                <div
+                                  class="text-sm opacity-70 truncate"
+                                  title={service.description}
+                                >
                                   {service.description}
                                 </div>
                               </div>
                               <div class="flex items-center space-x-2 shrink-0">
-                                <span 
-                                  class="badge whitespace-nowrap {service.running ? 'badge-success' : 'badge-error'}"
+                                <span
+                                  class="badge whitespace-nowrap {service.running
+                                    ? 'badge-success'
+                                    : 'badge-error'}"
                                 >
-                                  {service.running ? 'Running' : 'Stopped'}
+                                  {service.running ? "Running" : "Stopped"}
                                 </span>
-                                <button 
-                                  class="btn btn-ghost btn-sm shrink-0" 
+                                <button
+                                  class="btn btn-ghost btn-sm shrink-0"
                                   on:click={() => restartService(service.id)}
                                   title="Restart Service"
                                   aria-label="Restart {service.name} Service"
@@ -528,13 +563,15 @@
                   </div>
                 </div>
               {/if}
-              
-              {#if widgetKey === 'traffic_graph'}
+
+              {#if widgetKey === "traffic_graph"}
                 <InterfaceTrafficGraph />
               {/if}
-              
-              {#if widgetKey === 'gateways' && dashboardData.gatewayStatus}
-                <div class="card bg-base-100 shadow-xl">
+
+              <!-- Replace the gateways widget section in the mobile view with this code -->
+
+              {#if widgetKey === "gateways" && dashboardData.gatewayStatus}
+                <div class="card bg-base-100 shadow-xl w-full">
                   <div class="card-body">
                     <h3 class="card-title text-lg flex items-center gap-2">
                       <svg class="w-5 h-5 text-primary" viewBox="0 0 24 24">
@@ -547,38 +584,81 @@
                       {#each dashboardData.gatewayStatus.items as gateway}
                         <div class="border rounded-lg p-3">
                           <div
-                            class="flex justify-between items-center cursor-pointer"
-                            on:click={() => toggleGatewayExpansion(gateway.name)}
+                            class="grid grid-cols-[1fr,auto] gap-2 items-center cursor-pointer"
+                            on:click={() =>
+                              toggleGatewayExpansion(gateway.name)}
                           >
-                            <div>
+                            <!-- Gateway info section - has min-width-0 to enable truncation -->
+                            <div class="min-w-0 overflow-hidden">
                               <div class="font-medium flex items-center">
-                                <span class="inline-block w-2 h-2 rounded-full mr-2 {gateway.status_translated === 'Online' ? 'bg-success' : 'bg-error'}"></span>
-                                {gateway.name}
+                                <span
+                                  class="inline-block w-2 h-2 rounded-full mr-2 flex-shrink-0 {gateway.status_translated ===
+                                  'Online'
+                                    ? 'bg-success'
+                                    : 'bg-error'}"
+                                ></span>
+                                <span class="truncate" title={gateway.name}>
+                                  {gateway.name}
+                                </span>
                               </div>
-                              <div class="text-sm opacity-70">{gateway.address}</div>
+                              <div
+                                class="text-sm opacity-70 truncate"
+                                title={gateway.address}
+                              >
+                                {gateway.address}
+                              </div>
                             </div>
-                            <div class="flex items-center gap-2">
-                              <span class="badge badge-sm {gateway.status_translated === 'Online' ? 'badge-success' : 'badge-error'}">
+
+                            <!-- Status section that won't shrink -->
+                            <div class="flex items-center gap-1 flex-shrink-0">
+                              <span
+                                class="badge badge-sm whitespace-nowrap {gateway.status_translated ===
+                                'Online'
+                                  ? 'badge-success'
+                                  : 'badge-error'}"
+                              >
                                 {gateway.status_translated}
                               </span>
-                              <svg class="w-5 h-5" viewBox="0 0 24 24">
-                                <path fill="currentColor" d={expandedGateway === gateway.name ? mdiChevronUp : mdiChevronDown} />
+                              <svg
+                                class="w-5 h-5 flex-shrink-0"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  fill="currentColor"
+                                  d={expandedGateway === gateway.name
+                                    ? mdiChevronUp
+                                    : mdiChevronDown}
+                                />
                               </svg>
                             </div>
                           </div>
                           {#if expandedGateway === gateway.name}
-                            <div class="mt-3 text-sm grid grid-cols-3 gap-2 pt-2 border-t border-base-300">
+                            <div
+                              class="mt-3 text-sm grid grid-cols-3 gap-2 pt-2 border-t border-base-300"
+                            >
                               <div>
                                 <span class="font-medium">RTT:</span>
-                                <span class="ml-1">{gateway.delay === "~" ? "-" : gateway.delay}</span>
+                                <span class="ml-1"
+                                  >{gateway.delay === "~"
+                                    ? "-"
+                                    : gateway.delay}</span
+                                >
                               </div>
                               <div>
                                 <span class="font-medium">RTTd:</span>
-                                <span class="ml-1">{gateway.stddev === "~" ? "-" : gateway.stddev}</span>
+                                <span class="ml-1"
+                                  >{gateway.stddev === "~"
+                                    ? "-"
+                                    : gateway.stddev}</span
+                                >
                               </div>
                               <div>
                                 <span class="font-medium">Loss:</span>
-                                <span class="ml-1">{gateway.loss === "~" ? "-" : gateway.loss}</span>
+                                <span class="ml-1"
+                                  >{gateway.loss === "~"
+                                    ? "-"
+                                    : gateway.loss}</span
+                                >
                               </div>
                             </div>
                           {/if}
@@ -588,8 +668,8 @@
                   </div>
                 </div>
               {/if}
-              
-              {#if widgetKey === 'interfaces' && sortedInterfaces.length > 0}
+
+              {#if widgetKey === "interfaces" && sortedInterfaces.length > 0}
                 <div class="card bg-base-100 shadow-xl">
                   <div class="card-body">
                     <h3 class="card-title text-lg flex items-center gap-2">
@@ -613,16 +693,28 @@
                             <tr>
                               <td class="font-medium">
                                 <div class="flex items-center gap-2">
-                                  <div class="w-2 h-2 rounded-full bg-accent"></div>
+                                  <div
+                                    class="w-2 h-2 rounded-full bg-accent"
+                                  ></div>
                                   {interfaceData.name}
                                 </div>
-                                <div class="text-xs opacity-50">{interfaceData.device}</div>
+                                <div class="text-xs opacity-50">
+                                  {interfaceData.device}
+                                </div>
                               </td>
                               <td>
-                                <span class="font-mono">{formatBytes(interfaceData["bytes received"])}</span>
+                                <span class="font-mono"
+                                  >{formatBytes(
+                                    interfaceData["bytes received"],
+                                  )}</span
+                                >
                               </td>
                               <td>
-                                <span class="font-mono">{formatBytes(interfaceData["bytes transmitted"])}</span>
+                                <span class="font-mono"
+                                  >{formatBytes(
+                                    interfaceData["bytes transmitted"],
+                                  )}</span
+                                >
                               </td>
                             </tr>
                           {/each}
@@ -635,18 +727,18 @@
             {/if}
           {/each}
         </div>
-        
+
         <!-- Desktop View: Two Column Layout -->
         <div class="hidden lg:grid lg:grid-cols-2 lg:gap-6">
           <!-- Network Column -->
           <div class="space-y-6 order-first">
             {#each getNetworkWidgetOrder() as widgetKey}
               {#if isWidgetVisible(widgetKey)}
-                {#if widgetKey === 'traffic_graph'}
+                {#if widgetKey === "traffic_graph"}
                   <InterfaceTrafficGraph />
                 {/if}
-                
-                {#if widgetKey === 'gateways' && dashboardData.gatewayStatus}
+
+                {#if widgetKey === "gateways" && dashboardData.gatewayStatus}
                   <div class="card bg-base-100 shadow-xl">
                     <div class="card-body">
                       <h3 class="card-title text-lg flex items-center gap-2">
@@ -661,37 +753,69 @@
                           <div class="border rounded-lg p-3">
                             <div
                               class="flex justify-between items-center cursor-pointer"
-                              on:click={() => toggleGatewayExpansion(gateway.name)}
+                              on:click={() =>
+                                toggleGatewayExpansion(gateway.name)}
                             >
                               <div>
                                 <div class="font-medium flex items-center">
-                                  <span class="inline-block w-2 h-2 rounded-full mr-2 {gateway.status_translated === 'Online' ? 'bg-success' : 'bg-error'}"></span>
+                                  <span
+                                    class="inline-block w-2 h-2 rounded-full mr-2 {gateway.status_translated ===
+                                    'Online'
+                                      ? 'bg-success'
+                                      : 'bg-error'}"
+                                  ></span>
                                   {gateway.name}
                                 </div>
-                                <div class="text-sm opacity-70">{gateway.address}</div>
+                                <div class="text-sm opacity-70">
+                                  {gateway.address}
+                                </div>
                               </div>
                               <div class="flex items-center gap-2">
-                                <span class="badge badge-sm {gateway.status_translated === 'Online' ? 'badge-success' : 'badge-error'}">
+                                <span
+                                  class="badge badge-sm {gateway.status_translated ===
+                                  'Online'
+                                    ? 'badge-success'
+                                    : 'badge-error'}"
+                                >
                                   {gateway.status_translated}
                                 </span>
                                 <svg class="w-5 h-5" viewBox="0 0 24 24">
-                                  <path fill="currentColor" d={expandedGateway === gateway.name ? mdiChevronUp : mdiChevronDown} />
+                                  <path
+                                    fill="currentColor"
+                                    d={expandedGateway === gateway.name
+                                      ? mdiChevronUp
+                                      : mdiChevronDown}
+                                  />
                                 </svg>
                               </div>
                             </div>
                             {#if expandedGateway === gateway.name}
-                              <div class="mt-3 text-sm grid grid-cols-3 gap-2 pt-2 border-t border-base-300">
+                              <div
+                                class="mt-3 text-sm grid grid-cols-3 gap-2 pt-2 border-t border-base-300"
+                              >
                                 <div>
                                   <span class="font-medium">RTT:</span>
-                                  <span class="ml-1">{gateway.delay === "~" ? "-" : gateway.delay}</span>
+                                  <span class="ml-1"
+                                    >{gateway.delay === "~"
+                                      ? "-"
+                                      : gateway.delay}</span
+                                  >
                                 </div>
                                 <div>
                                   <span class="font-medium">RTTd:</span>
-                                  <span class="ml-1">{gateway.stddev === "~" ? "-" : gateway.stddev}</span>
+                                  <span class="ml-1"
+                                    >{gateway.stddev === "~"
+                                      ? "-"
+                                      : gateway.stddev}</span
+                                  >
                                 </div>
                                 <div>
                                   <span class="font-medium">Loss:</span>
-                                  <span class="ml-1">{gateway.loss === "~" ? "-" : gateway.loss}</span>
+                                  <span class="ml-1"
+                                    >{gateway.loss === "~"
+                                      ? "-"
+                                      : gateway.loss}</span
+                                  >
                                 </div>
                               </div>
                             {/if}
@@ -701,8 +825,8 @@
                     </div>
                   </div>
                 {/if}
-                
-                {#if widgetKey === 'interfaces' && sortedInterfaces.length > 0}
+
+                {#if widgetKey === "interfaces" && sortedInterfaces.length > 0}
                   <div class="card bg-base-100 shadow-xl">
                     <div class="card-body">
                       <h3 class="card-title text-lg flex items-center gap-2">
@@ -726,16 +850,28 @@
                               <tr>
                                 <td class="font-medium">
                                   <div class="flex items-center gap-2">
-                                    <div class="w-2 h-2 rounded-full bg-accent"></div>
+                                    <div
+                                      class="w-2 h-2 rounded-full bg-accent"
+                                    ></div>
                                     {interfaceData.name}
                                   </div>
-                                  <div class="text-xs opacity-50">{interfaceData.device}</div>
+                                  <div class="text-xs opacity-50">
+                                    {interfaceData.device}
+                                  </div>
                                 </td>
                                 <td>
-                                  <span class="font-mono">{formatBytes(interfaceData["bytes received"])}</span>
+                                  <span class="font-mono"
+                                    >{formatBytes(
+                                      interfaceData["bytes received"],
+                                    )}</span
+                                  >
                                 </td>
                                 <td>
-                                  <span class="font-mono">{formatBytes(interfaceData["bytes transmitted"])}</span>
+                                  <span class="font-mono"
+                                    >{formatBytes(
+                                      interfaceData["bytes transmitted"],
+                                    )}</span
+                                  >
                                 </td>
                               </tr>
                             {/each}
@@ -748,12 +884,12 @@
               {/if}
             {/each}
           </div>
-          
+
           <!-- System Resources Column -->
           <div class="space-y-6 order-last">
             {#each getResourceWidgetOrder() as widgetKey}
               {#if isWidgetVisible(widgetKey)}
-                {#if widgetKey === 'uptime' && dashboardData.systemTime}
+                {#if widgetKey === "uptime" && dashboardData.systemTime}
                   <div class="card bg-base-100 shadow-xl">
                     <div class="card-body">
                       <h3 class="card-title text-lg flex items-center gap-2">
@@ -762,63 +898,82 @@
                         </svg>
                         System Status
                       </h3>
-                      
+
                       <div class="divider my-2"></div>
-                      
+
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="space-y-3">
                           <div>
-                            <h4 class="text-sm font-medium opacity-70">Uptime</h4>
-                            <p class="text-lg font-mono">{dashboardData.systemTime.uptime}</p>
+                            <h4 class="text-sm font-medium opacity-70">
+                              Uptime
+                            </h4>
+                            <p class="text-lg font-mono">
+                              {dashboardData.systemTime.uptime}
+                            </p>
                           </div>
-                          
+
                           <div>
-                            <h4 class="text-sm font-medium opacity-70">Load average</h4>
-                            <p class="text-lg font-mono">{dashboardData.systemTime.loadavg}</p>
+                            <h4 class="text-sm font-medium opacity-70">
+                              Load average
+                            </h4>
+                            <p class="text-lg font-mono">
+                              {dashboardData.systemTime.loadavg}
+                            </p>
                           </div>
                         </div>
-                        
+
                         <div class="space-y-3">
                           <div>
-                            <h4 class="text-sm font-medium opacity-70">Current date/time</h4>
-                            <p class="text-lg font-mono">{dashboardData.systemTime.datetime}</p>
+                            <h4 class="text-sm font-medium opacity-70">
+                              Current date/time
+                            </h4>
+                            <p class="text-lg font-mono">
+                              {dashboardData.systemTime.datetime}
+                            </p>
                           </div>
-                          
+
                           <div>
-                            <h4 class="text-sm font-medium opacity-70">Last configuration change</h4>
-                            <p class="text-lg font-mono">{dashboardData.systemTime.config}</p>
+                            <h4 class="text-sm font-medium opacity-70">
+                              Last configuration change
+                            </h4>
+                            <p class="text-lg font-mono">
+                              {dashboardData.systemTime.config}
+                            </p>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
                 {/if}
-                
-                {#if widgetKey === 'memory' && dashboardData.systemResources}
+
+                {#if widgetKey === "memory" && dashboardData.systemResources}
                   <div class="card bg-base-100 shadow-xl">
                     <div class="card-body">
                       <h3 class="card-title text-lg flex items-center gap-2">
-                        <svg class="w-5 h-5 text-indigo-500" viewBox="0 0 24 24">
+                        <svg
+                          class="w-5 h-5 text-indigo-500"
+                          viewBox="0 0 24 24"
+                        >
                           <path fill="currentColor" d={mdiServer} />
                         </svg>
                         Memory Usage
                       </h3>
                       <div class="divider my-2"></div>
                       <div class="flex items-center justify-between">
-                        <div 
-                          class="radial-progress text-indigo-500" 
-                          style="--value:{memoryUsagePercent}; --size:4rem; --thickness: 8px;" 
+                        <div
+                          class="radial-progress text-indigo-500"
+                          style="--value:{memoryUsagePercent}; --size:4rem; --thickness: 8px;"
                           role="progressbar"
                         >
                           {memoryUsagePercent}%
                         </div>
                         <div>
                           <p class="text-sm">
-                            <span class="font-semibold">Used:</span> 
+                            <span class="font-semibold">Used:</span>
                             {dashboardData.systemResources.memory.used_frmt}
                           </p>
                           <p class="text-sm">
-                            <span class="font-semibold">Total:</span> 
+                            <span class="font-semibold">Total:</span>
                             {dashboardData.systemResources.memory.total_frmt}
                           </p>
                         </div>
@@ -826,8 +981,8 @@
                     </div>
                   </div>
                 {/if}
-                
-                {#if widgetKey === 'disk' && mainDisk}
+
+                {#if widgetKey === "disk" && mainDisk}
                   <div class="card bg-base-100 shadow-xl">
                     <div class="card-body">
                       <h3 class="card-title text-lg flex items-center gap-2">
@@ -838,24 +993,24 @@
                       </h3>
                       <div class="divider my-2"></div>
                       <div class="flex items-center justify-between">
-                        <div 
-                          class="radial-progress text-accent" 
-                          style="--value:{mainDisk.used_pct}; --size:4rem; --thickness: 8px;" 
+                        <div
+                          class="radial-progress text-accent"
+                          style="--value:{mainDisk.used_pct}; --size:4rem; --thickness: 8px;"
                           role="progressbar"
                         >
                           {mainDisk.used_pct}%
                         </div>
                         <div>
                           <p class="text-sm">
-                            <span class="font-semibold">Used:</span> 
+                            <span class="font-semibold">Used:</span>
                             {mainDisk.used}
                           </p>
                           <p class="text-sm">
-                            <span class="font-semibold">Available:</span> 
+                            <span class="font-semibold">Available:</span>
                             {mainDisk.available}
                           </p>
                           <p class="text-sm">
-                            <span class="font-semibold">Mountpoint:</span> 
+                            <span class="font-semibold">Mountpoint:</span>
                             {mainDisk.mountpoint}
                           </p>
                         </div>
@@ -863,13 +1018,16 @@
                     </div>
                   </div>
                 {/if}
-                
-                {#if widgetKey === 'services' && dashboardData.services}
+
+                {#if widgetKey === "services" && dashboardData.services}
                   <div class="card bg-base-100 shadow-xl">
                     <div class="card-body">
                       <div class="flex justify-between items-center">
                         <h3 class="card-title text-lg flex items-center gap-2">
-                          <svg class="w-5 h-5 text-secondary" viewBox="0 0 24 24">
+                          <svg
+                            class="w-5 h-5 text-secondary"
+                            viewBox="0 0 24 24"
+                          >
                             <path fill="currentColor" d={mdiServerNetwork} />
                           </svg>
                           Services
@@ -877,14 +1035,16 @@
                             {dashboardData.services.rows.length}
                           </span>
                         </h3>
-                        <button 
-                          class="btn btn-ghost btn-sm" 
+                        <button
+                          class="btn btn-ghost btn-sm"
                           on:click={toggleServicesExpansion}
                         >
                           <svg class="w-5 h-5" viewBox="0 0 24 24">
-                            <path 
-                              fill="currentColor" 
-                              d={expandedServices ? mdiChevronUp : mdiChevronDown} 
+                            <path
+                              fill="currentColor"
+                              d={expandedServices
+                                ? mdiChevronUp
+                                : mdiChevronDown}
                             />
                           </svg>
                         </button>
@@ -894,33 +1054,50 @@
                         <div class="divider my-2"></div>
                         <div class="space-y-3">
                           {#each dashboardData.services.rows as service}
-                            <div 
-                              class="border rounded-lg p-3 
-                              {service.running ? 'bg-success/10 border-success/30' : 'bg-error/10 border-error/30'}"
+                            <div
+                              class="border rounded-lg p-3
+                              {service.running
+                                ? 'bg-success/10 border-success/30'
+                                : 'bg-error/10 border-error/30'}"
                             >
-                              <div class="grid grid-cols-[1fr,auto] gap-2 items-center">
+                              <div
+                                class="grid grid-cols-[1fr,auto] gap-2 items-center"
+                              >
                                 <div class="min-w-0 overflow-hidden">
-                                  <div class="font-medium truncate" title={service.name}>
+                                  <div
+                                    class="font-medium truncate"
+                                    title={service.name}
+                                  >
                                     {service.name}
                                   </div>
-                                  <div class="text-sm opacity-70 truncate" title={service.description}>
+                                  <div
+                                    class="text-sm opacity-70 truncate"
+                                    title={service.description}
+                                  >
                                     {service.description}
                                   </div>
                                 </div>
-                                <div class="flex items-center space-x-2 shrink-0">
-                                  <span 
-                                    class="badge whitespace-nowrap {service.running ? 'badge-success' : 'badge-error'}"
+                                <div
+                                  class="flex items-center space-x-2 shrink-0"
+                                >
+                                  <span
+                                    class="badge whitespace-nowrap {service.running
+                                      ? 'badge-success'
+                                      : 'badge-error'}"
                                   >
-                                    {service.running ? 'Running' : 'Stopped'}
+                                    {service.running ? "Running" : "Stopped"}
                                   </span>
-                                  <button 
-                                    class="btn btn-ghost btn-sm shrink-0" 
+                                  <button
+                                    class="btn btn-ghost btn-sm shrink-0"
                                     on:click={() => restartService(service.id)}
                                     title="Restart Service"
                                     aria-label="Restart {service.name} Service"
                                   >
                                     <svg class="w-5 h-5" viewBox="0 0 24 24">
-                                      <path fill="currentColor" d={mdiRestart} />
+                                      <path
+                                        fill="currentColor"
+                                        d={mdiRestart}
+                                      />
                                     </svg>
                                   </button>
                                 </div>
@@ -954,5 +1131,59 @@
 
   .progress-ring {
     animation: rotate 5s linear infinite;
+  }
+
+  @media (max-width: 640px) {
+    /* Mobile style improvements */
+    .card {
+      width: 100% !important;
+      max-width: 100% !important;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .card-body {
+      padding: 1rem;
+    }
+
+    /* Ensure proper truncation */
+    .truncate {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: block;
+    }
+
+    /* Improve spacing for gateway cards */
+    .badge {
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+    }
+
+    /* Reduce padding in portrait mode */
+    .p-6 {
+      padding: 1rem;
+    }
+
+    /* Service and gateway cards improvements */
+    .grid-cols-\[1fr\,auto\] {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+  }
+
+  /* iPhone SE and smaller screens */
+  @media (max-width: 375px) {
+    .card-body {
+      padding: 0.75rem;
+    }
+
+    .badge {
+      font-size: 0.65rem;
+    }
+
+    .p-6 {
+      padding: 0.75rem;
+    }
   }
 </style>

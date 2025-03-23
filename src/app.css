@@ -178,3 +178,9 @@ header.fixed-header {
   -webkit-transform: translateZ(0);
   transform: translateZ(0); 
 }
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
