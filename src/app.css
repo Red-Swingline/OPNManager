@@ -68,3 +68,99 @@
   .text-secondary {
     color: #4A9D9A !important;
   }
+
+  /* iOS input zoom fix */
+@media screen and (-webkit-min-device-pixel-ratio: 0) { 
+  select,
+  textarea,
+  input[type="text"],
+  input[type="password"],
+  input[type="number"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="url"] {
+    font-size: 16px !important;
+  }
+}
+
+/* Specific fix for iOS numeric inputs */
+input[type="number"],
+input[inputmode="numeric"] {
+  font-size: 16px !important;
+}
+
+/* Ensure form controls don't zoom on iOS Safari */
+@supports (-webkit-overflow-scrolling: touch) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+
+/* Animation to briefly set opacity to 0 then back to 1 */
+@keyframes prevent-ios-scroll {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* Safari-only selector to apply the fix only on iOS devices */
+@supports (-webkit-touch-callout: none) {
+  input:focus, 
+  textarea:focus, 
+  select:focus {
+    animation: prevent-ios-scroll 0.01s;
+  }
+}
+
+/* iOS Scroll Bounce Fix - Add to app.css */
+
+/* Prevent bounce/rubber-band scrolling effect on iOS */
+html, body {
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+}
+
+/* Create a scrollable container for all content */
+#app-container {
+  -webkit-overflow-scrolling: touch; /* Enable momentum scrolling */
+  height: 100%;
+  overflow-y: auto;
+  position: absolute;
+  width: 100%;
+}
+
+/* For child pages/routes */
+.page-content {
+  padding-bottom: 60px; /* Add some padding to ensure content isn't hidden behind fixed elements */
+  min-height: 100%;
+}
+
+/* Fix for any fixed positioned elements like headers/footers */
+.fixed-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: var(--base-100, #ffffff);
+}
+
+.fixed-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  background-color: var(--base-100, #ffffff);
+}
+
+/* Additional iOS-specific fixes */
+@supports (-webkit-touch-callout: none) {
+  /* Disable overscroll behavior */
+  body, #app-container {
+    overscroll-behavior: none;
+  }
+  
+  /* Ensure full page height calculations */
+  .min-h-screen {
+    min-height: -webkit-fill-available;
+  }
+}
