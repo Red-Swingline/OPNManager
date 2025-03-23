@@ -22,7 +22,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { toasts } from "$lib/stores/toastStore";
   import { onMount } from "svelte";
-  
+
   // Add iOS-specific scroll handling
   import { setupIOSScrolling } from "$lib/utils/iosScrollManager";
 
@@ -31,7 +31,7 @@
   let isRebootDialogOpen = false;
   let theme = "light";
   let expandedCategories = { unbound: false };
-  
+
   // Add scroll manager reference
   let scrollManager;
 
@@ -42,27 +42,27 @@
     { path: "/routes", icon: mdiMapMarkerPath, label: "Routes" },
     { path: "/rules", icon: mdiWallFire, label: "Firewall Rules" },
     { path: "/logs", icon: mdiTextBoxSearch, label: "Firewall Logs" },
-    { 
-      category: "unbound", 
-      icon: mdiDnsOutline, 
+    {
+      category: "unbound",
+      icon: mdiDnsOutline,
       label: "Unbound",
       items: [
-        { path: "/unbound", icon: mdiDnsOutline, label: "DNS Blocklist" }
-      ]
+        { path: "/unbound", icon: mdiDnsOutline, label: "DNS Blocklist" },
+      ],
     },
     { path: "/updates", icon: mdiUpdate, label: "Updates" },
     { path: "/settings", icon: mdiCog, label: "Settings" },
   ];
-  
+
   function toggleSidebar() {
     isSidebarOpen = !isSidebarOpen;
   }
 
   function handleLogout() {
-    goto('/logout');
+    goto("/logout");
     isSidebarOpen = false;
   }
-  
+
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === "Enter" || event.key === " ") {
       toggleSidebar();
@@ -112,20 +112,44 @@
   function toggleTheme() {
     theme = theme === "light" ? "dark" : "light";
     document.documentElement.setAttribute("data-theme", theme);
+
+    // Save theme preference
+    localStorage.setItem("theme", theme);
+
+    // Force repaint on iOS
+    if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
+      // Toggle a class on the header to force a repaint
+      const header = document.querySelector("header.fixed-header");
+      if (header) {
+        header.classList.add("theme-updating");
+        setTimeout(() => {
+          header.classList.remove("theme-updating");
+        }, 50);
+      }
+    }
   }
 
   // Check if the current page is in a category or its items
   function isInCategory(category) {
-    return category.items && category.items.some(item => $page.url.pathname === item.path);
+    return (
+      category.items &&
+      category.items.some((item) => $page.url.pathname === item.path)
+    );
   }
-  
+
   onMount(() => {
+    // Initialize the theme from localStorage or use default
+    const savedTheme = localStorage.getItem("theme") || "light";
+    theme = savedTheme;
+    document.documentElement.setAttribute("data-theme", theme);
+
     // Initialize the iOS scroll manager
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window).MSStream;
+    const isIOS =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     if (isIOS) {
       scrollManager = setupIOSScrolling();
     }
-    
+
     return () => {
       // Clean up when component is destroyed
       if (scrollManager && scrollManager.cleanup) {
@@ -149,7 +173,8 @@
               <button
                 on:click={() => toggleCategory(item.category)}
                 class="flex items-center justify-between w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
-                class:bg-base-300={isInCategory(item) || expandedCategories[item.category]}
+                class:bg-base-300={isInCategory(item) ||
+                  expandedCategories[item.category]}
                 aria-expanded={expandedCategories[item.category]}
               >
                 <div class="flex items-center space-x-3">
@@ -159,7 +184,12 @@
                   <span>{item.label}</span>
                 </div>
                 <svg class="w-5 h-5" viewBox="0 0 24 24">
-                  <path fill="currentColor" d={expandedCategories[item.category] ? mdiChevronUp : mdiChevronDown} />
+                  <path
+                    fill="currentColor"
+                    d={expandedCategories[item.category]
+                      ? mdiChevronUp
+                      : mdiChevronDown}
+                  />
                 </svg>
               </button>
               {#if expandedCategories[item.category]}
@@ -244,7 +274,7 @@
         <!-- Theme toggle button -->
         <button
           type="button"
-          class="p-1 rounded-md hover:bg-base-200 transition-colors duration-200"
+          class="p-1 rounded-md hover:bg-base-200 transition-colors duration-200 theme-toggle-btn"
           on:click={toggleTheme}
           aria-label="Toggle theme"
         >
@@ -286,7 +316,8 @@
                 <button
                   on:click={() => toggleCategory(item.category)}
                   class="flex items-center justify-between w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
-                  class:bg-base-300={isInCategory(item) || expandedCategories[item.category]}
+                  class:bg-base-300={isInCategory(item) ||
+                    expandedCategories[item.category]}
                   aria-expanded={expandedCategories[item.category]}
                 >
                   <div class="flex items-center space-x-3">
@@ -296,7 +327,12 @@
                     <span>{item.label}</span>
                   </div>
                   <svg class="w-5 h-5" viewBox="0 0 24 24">
-                    <path fill="currentColor" d={expandedCategories[item.category] ? mdiChevronUp : mdiChevronDown} />
+                    <path
+                      fill="currentColor"
+                      d={expandedCategories[item.category]
+                        ? mdiChevronUp
+                        : mdiChevronDown}
+                    />
                   </svg>
                 </button>
                 {#if expandedCategories[item.category]}
@@ -306,7 +342,8 @@
                         <button
                           on:click={() => handleNavigation(subItem.path)}
                           class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
-                          class:bg-base-300={$page.url.pathname === subItem.path}
+                          class:bg-base-300={$page.url.pathname ===
+                            subItem.path}
                         >
                           <svg class="w-5 h-5" viewBox="0 0 24 24">
                             <path fill="currentColor" d={subItem.icon} />
@@ -450,7 +487,7 @@
     .page-content {
       padding-bottom: 80px !important;
     }
-    
+
     /* Ensure the fixed header doesn't disappear during scroll */
     .fixed-header {
       position: sticky;
@@ -458,25 +495,25 @@
       z-index: 10;
       backdrop-filter: blur(8px);
     }
-    
+
     /* Prevent "bounce" effect on the main layout container */
     #app-layout-container {
       height: 100%;
       overflow: hidden;
     }
-    
+
     /* Adjusted scrolling for the main content area */
     .page-content {
       -webkit-overflow-scrolling: touch;
       overscroll-behavior: none;
     }
-    
+
     /* Fix the height in iOS */
     .min-h-screen {
       min-height: -webkit-fill-available;
     }
   }
-  
+
   /* Original styles */
   .btn-circle {
     @apply rounded-full w-14 h-14 p-0 grid place-items-center;

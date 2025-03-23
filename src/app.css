@@ -164,3 +164,21 @@ html, body {
     min-height: -webkit-fill-available;
   }
 }
+.theme-updating {
+  transform: translateZ(0);
+}
+
+.theme-toggle-btn {
+  color: var(--base-content);
+  background-color: transparent;
+}
+
+.theme-toggle-btn:hover {
+  background-color: var(--base-300);
+}
+header.fixed-header {
+  background-color: var(--b1, var(--base-100));
+  color: var(--bc, var(--base-content));
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0); /* Hardware acceleration */
+}
