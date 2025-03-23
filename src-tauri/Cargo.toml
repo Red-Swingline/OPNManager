@@ -1,6 +1,6 @@
 [package]
 name = "OPNManager"
-version = "3.0.11"
+version = "3.0.12"
 description = "Easily manage your OPNsense firewall from your phone."
 authors = ["Steve Thacher"]
 edition = "2021"
@@ -12,17 +12,17 @@ name = "OPNManager_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.1.0", features = [] }
 
 [dependencies]
-tauri = { version = "2.2.5", features = ["devtools"] }
+tauri = { version = "2.4.0", features = ["devtools"] }
 tauri-plugin-shell = "2.2.0"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 rusqlite = { version = "0.34.0", features = ["bundled"] }
 rand = "0.8.5"
 argon2 = "0.5.3"
-reqwest = { version = "0.12.14", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12.15", features = ["json", "rustls-tls"], default-features = false }
 log = "0.4.22"
 base64 = "0.22.1"
 tauri-plugin-log = "2.3.1"

@@ -1,9 +1,10 @@
-use crate::db::{ApiInfo, Database};
+use crate::db::{self, ApiInfo, Database};
 use crate::http_client::make_http_request;
 use crate::pin_cache::PinCache;
 use log::{error, info};
 use serde::Deserialize;
 use serde_json::Value;
+use std::collections::HashMap;
 use tauri::State;
 
 #[tauri::command]
@@ -280,4 +281,33 @@ pub async fn test_api_connection(
         }
         Err(e) => Err(e),
     }
+}
+
+#[tauri::command]
+pub fn get_dashboard_preferences(
+    database: State<Database>,
+) -> Result<HashMap<String, db::DashboardWidgetPref>, String> {
+    let api_info = database
+        .get_default_api_info()
+        .map_err(|e| format!("Failed to get API info: {}", e))?
+        .ok_or_else(|| "API info not found".to_string())?;
+
+    database
+        .get_dashboard_preferences(api_info.id)
+        .map_err(|e| format!("Failed to get dashboard preferences: {}", e))
+}
+
+#[tauri::command]
+pub fn save_dashboard_preferences(
+    prefs: Vec<db::DashboardWidgetPref>,
+    database: State<Database>,
+) -> Result<(), String> {
+    let api_info = database
+        .get_default_api_info()
+        .map_err(|e| format!("Failed to get API info: {}", e))?
+        .ok_or_else(|| "API info not found".to_string())?;
+
+    database
+        .save_dashboard_preferences(api_info.id, &prefs)
+        .map_err(|e| format!("Failed to save dashboard preferences: {}", e))
 }

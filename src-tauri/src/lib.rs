@@ -49,6 +49,8 @@ pub fn run() {
             commands::delete_api_profile,
             commands::set_default_profile,
             commands::test_api_connection,
+            commands::get_dashboard_preferences,
+            commands::save_dashboard_preferences,
             pin_cache::set_pin,
             pin_cache::clear_pin,
             pin_cache::verify_pin,

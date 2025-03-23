@@ -1,17 +1,16 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { goto } from "$app/navigation";
   import Login from "$lib/components/forms/Login.svelte";
   import AppLayout from "./AppLayout.svelte";
   import InitialSetupForm from "$lib/components/forms/InitialSetupForm.svelte";
-  import SystemResourcesColumn from "$lib/components/dashboard/SystemResourcesColumn.svelte";
-  import NetworkInformationColumn from "$lib/components/dashboard/NetworkInformationColumn.svelte";
+  import DashboardConfig from "$lib/components/dashboard/DashboardConfig.svelte";
+  import InterfaceTrafficGraph from "$lib/components/dashboard/InterfaceTrafficGraph.svelte";
   import { toasts } from "$lib/stores/toastStore";
   import { authStore } from "$lib/stores/authStore";
-  import { goto } from "$app/navigation";
+  import { dashboardStore } from "$lib/stores/dashboardStore";
   import {
-    mdiArrowUp,
-    mdiArrowDown,
     mdiRestart,
     mdiChevronDown,
     mdiChevronUp,
@@ -20,6 +19,8 @@
     mdiEthernet,
     mdiServer,
     mdiHarddisk,
+    mdiViewDashboardEditOutline,
+    mdiClockOutline
   } from "@mdi/js";
 
   interface InterfaceData {
@@ -188,13 +189,17 @@
     expandedGateway = expandedGateway === gatewayName ? null : gatewayName;
   }
 
+  function toggleDashboardEditMode() {
+    dashboardStore.toggleEditMode();
+  }
+
   onMount(async () => {
     try {
       isFirstRun = await invoke<boolean>("check_first_run");
       if (!isFirstRun) {
         authStore.setConfigured(true);
         if ($authStore.isLoggedIn) {
-          // Clear traffic cache explicitly when loading dashboard
+          await dashboardStore.loadPreferences();
           await invoke("clear_traffic_cache");
           await loadDashboardData();
           startPolling();
@@ -248,8 +253,50 @@
 
   async function handleLogin() {
     authStore.login();
+    await dashboardStore.loadPreferences();
     await loadDashboardData();
     startPolling();
+  }
+
+  function isWidgetVisible(key: string): boolean {
+    if (!$dashboardStore.isLoaded) return true;
+    const widget = $dashboardStore.widgets.find(w => w.widget_key === key);
+    return widget ? widget.visible : true;
+  }
+
+  function getResourceWidgetOrder(): string[] {
+    if (!$dashboardStore.isLoaded) {
+      return ['uptime', 'memory', 'disk', 'services'];
+    }
+    
+    return $dashboardStore.widgets
+      .filter(w => ['uptime', 'memory', 'disk', 'services'].includes(w.widget_key))
+      .sort((a, b) => a.position - b.position)
+      .map(w => w.widget_key);
+  }
+
+  function getNetworkWidgetOrder(): string[] {
+    if (!$dashboardStore.isLoaded) {
+      return ['traffic_graph', 'gateways', 'interfaces'];
+    }
+    
+    return $dashboardStore.widgets
+      .filter(w => ['traffic_graph', 'gateways', 'interfaces'].includes(w.widget_key))
+      .sort((a, b) => a.position - b.position)
+      .map(w => w.widget_key);
+  }
+
+  function getAllWidgetsInOrder(): string[] {
+    if (!$dashboardStore.isLoaded) {
+      return [
+        'uptime', 'memory', 'disk', 'services',
+        'traffic_graph', 'gateways', 'interfaces'
+      ];
+    }
+    
+    return $dashboardStore.widgets
+      .sort((a, b) => a.position - b.position)
+      .map(w => w.widget_key);
   }
 </script>
 
@@ -276,27 +323,618 @@
 {:else}
   <AppLayout>
     <div class="p-6 max-w-7xl mx-auto">
-      <h2 class="text-2xl font-bold mb-6">Dashboard</h2>
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold">Dashboard</h2>
+        
+        <!-- Dashboard Edit Button -->
+        <button 
+          class="btn btn-outline btn-sm gap-2"
+          on:click={toggleDashboardEditMode}
+          class:btn-primary={$dashboardStore.isEditing}
+        >
+          <svg class="w-5 h-5" viewBox="0 0 24 24">
+            <path fill="currentColor" d={mdiViewDashboardEditOutline} />
+          </svg>
+          {$dashboardStore.isEditing ? "Done Editing" : "Customize Dashboard"}
+        </button>
+      </div>
+
+      <!-- Dashboard Customization UI -->
+      {#if $dashboardStore.isEditing}
+        <DashboardConfig />
+      {/if}
 
       {#if dashboardData.gatewayStatus && dashboardData.services && dashboardData.interfaceTraffic}
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <SystemResourcesColumn
-            systemResources={dashboardData.systemResources}
-            {mainDisk}
-            services={dashboardData.services.rows}
-            systemTime={dashboardData.systemTime}
-            {expandedServices}
-            {toggleServicesExpansion}
-            {restartService}
-          />
+        <!-- Mobile View: Single Column with Widgets in Position Order -->
+        <div class="lg:hidden flex flex-col space-y-6">
+          {#each getAllWidgetsInOrder() as widgetKey}
+            {#if isWidgetVisible(widgetKey)}
+              {#if widgetKey === 'uptime' && dashboardData.systemTime}
+                <div class="card bg-base-100 shadow-xl">
+                  <div class="card-body">
+                    <h3 class="card-title text-lg flex items-center gap-2">
+                      <svg class="w-5 h-5 text-primary" viewBox="0 0 24 24">
+                        <path fill="currentColor" d={mdiClockOutline} />
+                      </svg>
+                      System Status
+                    </h3>
+                    
+                    <div class="divider my-2"></div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div class="space-y-3">
+                        <div>
+                          <h4 class="text-sm font-medium opacity-70">Uptime</h4>
+                          <p class="text-lg font-mono">{dashboardData.systemTime.uptime}</p>
+                        </div>
+                        
+                        <div>
+                          <h4 class="text-sm font-medium opacity-70">Load average</h4>
+                          <p class="text-lg font-mono">{dashboardData.systemTime.loadavg}</p>
+                        </div>
+                      </div>
+                      
+                      <div class="space-y-3">
+                        <div>
+                          <h4 class="text-sm font-medium opacity-70">Current date/time</h4>
+                          <p class="text-lg font-mono">{dashboardData.systemTime.datetime}</p>
+                        </div>
+                        
+                        <div>
+                          <h4 class="text-sm font-medium opacity-70">Last configuration change</h4>
+                          <p class="text-lg font-mono">{dashboardData.systemTime.config}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              {/if}
+              
+              {#if widgetKey === 'memory' && dashboardData.systemResources}
+                <div class="card bg-base-100 shadow-xl">
+                  <div class="card-body">
+                    <h3 class="card-title text-lg flex items-center gap-2">
+                      <svg class="w-5 h-5 text-indigo-500" viewBox="0 0 24 24">
+                        <path fill="currentColor" d={mdiServer} />
+                      </svg>
+                      Memory Usage
+                    </h3>
+                    <div class="divider my-2"></div>
+                    <div class="flex items-center justify-between">
+                      <div 
+                        class="radial-progress text-indigo-500" 
+                        style="--value:{memoryUsagePercent}; --size:4rem; --thickness: 8px;" 
+                        role="progressbar"
+                      >
+                        {memoryUsagePercent}%
+                      </div>
+                      <div>
+                        <p class="text-sm">
+                          <span class="font-semibold">Used:</span> 
+                          {dashboardData.systemResources.memory.used_frmt}
+                        </p>
+                        <p class="text-sm">
+                          <span class="font-semibold">Total:</span> 
+                          {dashboardData.systemResources.memory.total_frmt}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              {/if}
+              
+              {#if widgetKey === 'disk' && mainDisk}
+                <div class="card bg-base-100 shadow-xl">
+                  <div class="card-body">
+                    <h3 class="card-title text-lg flex items-center gap-2">
+                      <svg class="w-5 h-5 text-accent" viewBox="0 0 24 24">
+                        <path fill="currentColor" d={mdiHarddisk} />
+                      </svg>
+                      Disk Usage
+                    </h3>
+                    <div class="divider my-2"></div>
+                    <div class="flex items-center justify-between">
+                      <div 
+                        class="radial-progress text-accent" 
+                        style="--value:{mainDisk.used_pct}; --size:4rem; --thickness: 8px;" 
+                        role="progressbar"
+                      >
+                        {mainDisk.used_pct}%
+                      </div>
+                      <div>
+                        <p class="text-sm">
+                          <span class="font-semibold">Used:</span> 
+                          {mainDisk.used}
+                        </p>
+                        <p class="text-sm">
+                          <span class="font-semibold">Available:</span> 
+                          {mainDisk.available}
+                        </p>
+                        <p class="text-sm">
+                          <span class="font-semibold">Mountpoint:</span> 
+                          {mainDisk.mountpoint}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              {/if}
+              
+              {#if widgetKey === 'services' && dashboardData.services}
+                <div class="card bg-base-100 shadow-xl">
+                  <div class="card-body">
+                    <div class="flex justify-between items-center">
+                      <h3 class="card-title text-lg flex items-center gap-2">
+                        <svg class="w-5 h-5 text-secondary" viewBox="0 0 24 24">
+                          <path fill="currentColor" d={mdiServerNetwork} />
+                        </svg>
+                        Services
+                        <span class="badge badge-sm ml-2">
+                          {dashboardData.services.rows.length}
+                        </span>
+                      </h3>
+                      <button 
+                        class="btn btn-ghost btn-sm" 
+                        on:click={toggleServicesExpansion}
+                      >
+                        <svg class="w-5 h-5" viewBox="0 0 24 24">
+                          <path 
+                            fill="currentColor" 
+                            d={expandedServices ? mdiChevronUp : mdiChevronDown} 
+                          />
+                        </svg>
+                      </button>
+                    </div>
 
-          <NetworkInformationColumn
-            gatewayStatus={dashboardData.gatewayStatus.items}
-            {expandedGateway}
-            {toggleGatewayExpansion}
-            {sortedInterfaces}
-            {formatBytes}
-          />
+                    {#if expandedServices}
+                      <div class="divider my-2"></div>
+                      <div class="space-y-3">
+                        {#each dashboardData.services.rows as service}
+                          <div 
+                            class="border rounded-lg p-3 
+                            {service.running ? 'bg-success/10 border-success/30' : 'bg-error/10 border-error/30'}"
+                          >
+                            <div class="grid grid-cols-[1fr,auto] gap-2 items-center">
+                              <div class="min-w-0 overflow-hidden">
+                                <div class="font-medium truncate" title={service.name}>
+                                  {service.name}
+                                </div>
+                                <div class="text-sm opacity-70 truncate" title={service.description}>
+                                  {service.description}
+                                </div>
+                              </div>
+                              <div class="flex items-center space-x-2 shrink-0">
+                                <span 
+                                  class="badge whitespace-nowrap {service.running ? 'badge-success' : 'badge-error'}"
+                                >
+                                  {service.running ? 'Running' : 'Stopped'}
+                                </span>
+                                <button 
+                                  class="btn btn-ghost btn-sm shrink-0" 
+                                  on:click={() => restartService(service.id)}
+                                  title="Restart Service"
+                                  aria-label="Restart {service.name} Service"
+                                >
+                                  <svg class="w-5 h-5" viewBox="0 0 24 24">
+                                    <path fill="currentColor" d={mdiRestart} />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
+                </div>
+              {/if}
+              
+              {#if widgetKey === 'traffic_graph'}
+                <InterfaceTrafficGraph />
+              {/if}
+              
+              {#if widgetKey === 'gateways' && dashboardData.gatewayStatus}
+                <div class="card bg-base-100 shadow-xl">
+                  <div class="card-body">
+                    <h3 class="card-title text-lg flex items-center gap-2">
+                      <svg class="w-5 h-5 text-primary" viewBox="0 0 24 24">
+                        <path fill="currentColor" d={mdiRouter} />
+                      </svg>
+                      Gateways
+                    </h3>
+                    <div class="divider my-2"></div>
+                    <div class="space-y-3">
+                      {#each dashboardData.gatewayStatus.items as gateway}
+                        <div class="border rounded-lg p-3">
+                          <div
+                            class="flex justify-between items-center cursor-pointer"
+                            on:click={() => toggleGatewayExpansion(gateway.name)}
+                          >
+                            <div>
+                              <div class="font-medium flex items-center">
+                                <span class="inline-block w-2 h-2 rounded-full mr-2 {gateway.status_translated === 'Online' ? 'bg-success' : 'bg-error'}"></span>
+                                {gateway.name}
+                              </div>
+                              <div class="text-sm opacity-70">{gateway.address}</div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                              <span class="badge badge-sm {gateway.status_translated === 'Online' ? 'badge-success' : 'badge-error'}">
+                                {gateway.status_translated}
+                              </span>
+                              <svg class="w-5 h-5" viewBox="0 0 24 24">
+                                <path fill="currentColor" d={expandedGateway === gateway.name ? mdiChevronUp : mdiChevronDown} />
+                              </svg>
+                            </div>
+                          </div>
+                          {#if expandedGateway === gateway.name}
+                            <div class="mt-3 text-sm grid grid-cols-3 gap-2 pt-2 border-t border-base-300">
+                              <div>
+                                <span class="font-medium">RTT:</span>
+                                <span class="ml-1">{gateway.delay === "~" ? "-" : gateway.delay}</span>
+                              </div>
+                              <div>
+                                <span class="font-medium">RTTd:</span>
+                                <span class="ml-1">{gateway.stddev === "~" ? "-" : gateway.stddev}</span>
+                              </div>
+                              <div>
+                                <span class="font-medium">Loss:</span>
+                                <span class="ml-1">{gateway.loss === "~" ? "-" : gateway.loss}</span>
+                              </div>
+                            </div>
+                          {/if}
+                        </div>
+                      {/each}
+                    </div>
+                  </div>
+                </div>
+              {/if}
+              
+              {#if widgetKey === 'interfaces' && sortedInterfaces.length > 0}
+                <div class="card bg-base-100 shadow-xl">
+                  <div class="card-body">
+                    <h3 class="card-title text-lg flex items-center gap-2">
+                      <svg class="w-5 h-5 text-accent" viewBox="0 0 24 24">
+                        <path fill="currentColor" d={mdiEthernet} />
+                      </svg>
+                      Interface Traffic
+                    </h3>
+                    <div class="divider my-2"></div>
+                    <div class="overflow-x-auto">
+                      <table class="table table-zebra w-full">
+                        <thead>
+                          <tr>
+                            <th>Interface</th>
+                            <th>Received</th>
+                            <th>Transmitted</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each sortedInterfaces as [key, interfaceData]}
+                            <tr>
+                              <td class="font-medium">
+                                <div class="flex items-center gap-2">
+                                  <div class="w-2 h-2 rounded-full bg-accent"></div>
+                                  {interfaceData.name}
+                                </div>
+                                <div class="text-xs opacity-50">{interfaceData.device}</div>
+                              </td>
+                              <td>
+                                <span class="font-mono">{formatBytes(interfaceData["bytes received"])}</span>
+                              </td>
+                              <td>
+                                <span class="font-mono">{formatBytes(interfaceData["bytes transmitted"])}</span>
+                              </td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              {/if}
+            {/if}
+          {/each}
+        </div>
+        
+        <!-- Desktop View: Two Column Layout -->
+        <div class="hidden lg:grid lg:grid-cols-2 lg:gap-6">
+          <!-- Network Column -->
+          <div class="space-y-6 order-first">
+            {#each getNetworkWidgetOrder() as widgetKey}
+              {#if isWidgetVisible(widgetKey)}
+                {#if widgetKey === 'traffic_graph'}
+                  <InterfaceTrafficGraph />
+                {/if}
+                
+                {#if widgetKey === 'gateways' && dashboardData.gatewayStatus}
+                  <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body">
+                      <h3 class="card-title text-lg flex items-center gap-2">
+                        <svg class="w-5 h-5 text-primary" viewBox="0 0 24 24">
+                          <path fill="currentColor" d={mdiRouter} />
+                        </svg>
+                        Gateways
+                      </h3>
+                      <div class="divider my-2"></div>
+                      <div class="space-y-3">
+                        {#each dashboardData.gatewayStatus.items as gateway}
+                          <div class="border rounded-lg p-3">
+                            <div
+                              class="flex justify-between items-center cursor-pointer"
+                              on:click={() => toggleGatewayExpansion(gateway.name)}
+                            >
+                              <div>
+                                <div class="font-medium flex items-center">
+                                  <span class="inline-block w-2 h-2 rounded-full mr-2 {gateway.status_translated === 'Online' ? 'bg-success' : 'bg-error'}"></span>
+                                  {gateway.name}
+                                </div>
+                                <div class="text-sm opacity-70">{gateway.address}</div>
+                              </div>
+                              <div class="flex items-center gap-2">
+                                <span class="badge badge-sm {gateway.status_translated === 'Online' ? 'badge-success' : 'badge-error'}">
+                                  {gateway.status_translated}
+                                </span>
+                                <svg class="w-5 h-5" viewBox="0 0 24 24">
+                                  <path fill="currentColor" d={expandedGateway === gateway.name ? mdiChevronUp : mdiChevronDown} />
+                                </svg>
+                              </div>
+                            </div>
+                            {#if expandedGateway === gateway.name}
+                              <div class="mt-3 text-sm grid grid-cols-3 gap-2 pt-2 border-t border-base-300">
+                                <div>
+                                  <span class="font-medium">RTT:</span>
+                                  <span class="ml-1">{gateway.delay === "~" ? "-" : gateway.delay}</span>
+                                </div>
+                                <div>
+                                  <span class="font-medium">RTTd:</span>
+                                  <span class="ml-1">{gateway.stddev === "~" ? "-" : gateway.stddev}</span>
+                                </div>
+                                <div>
+                                  <span class="font-medium">Loss:</span>
+                                  <span class="ml-1">{gateway.loss === "~" ? "-" : gateway.loss}</span>
+                                </div>
+                              </div>
+                            {/if}
+                          </div>
+                        {/each}
+                      </div>
+                    </div>
+                  </div>
+                {/if}
+                
+                {#if widgetKey === 'interfaces' && sortedInterfaces.length > 0}
+                  <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body">
+                      <h3 class="card-title text-lg flex items-center gap-2">
+                        <svg class="w-5 h-5 text-accent" viewBox="0 0 24 24">
+                          <path fill="currentColor" d={mdiEthernet} />
+                        </svg>
+                        Interface Traffic
+                      </h3>
+                      <div class="divider my-2"></div>
+                      <div class="overflow-x-auto">
+                        <table class="table table-zebra w-full">
+                          <thead>
+                            <tr>
+                              <th>Interface</th>
+                              <th>Received</th>
+                              <th>Transmitted</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {#each sortedInterfaces as [key, interfaceData]}
+                              <tr>
+                                <td class="font-medium">
+                                  <div class="flex items-center gap-2">
+                                    <div class="w-2 h-2 rounded-full bg-accent"></div>
+                                    {interfaceData.name}
+                                  </div>
+                                  <div class="text-xs opacity-50">{interfaceData.device}</div>
+                                </td>
+                                <td>
+                                  <span class="font-mono">{formatBytes(interfaceData["bytes received"])}</span>
+                                </td>
+                                <td>
+                                  <span class="font-mono">{formatBytes(interfaceData["bytes transmitted"])}</span>
+                                </td>
+                              </tr>
+                            {/each}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                {/if}
+              {/if}
+            {/each}
+          </div>
+          
+          <!-- System Resources Column -->
+          <div class="space-y-6 order-last">
+            {#each getResourceWidgetOrder() as widgetKey}
+              {#if isWidgetVisible(widgetKey)}
+                {#if widgetKey === 'uptime' && dashboardData.systemTime}
+                  <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body">
+                      <h3 class="card-title text-lg flex items-center gap-2">
+                        <svg class="w-5 h-5 text-primary" viewBox="0 0 24 24">
+                          <path fill="currentColor" d={mdiClockOutline} />
+                        </svg>
+                        System Status
+                      </h3>
+                      
+                      <div class="divider my-2"></div>
+                      
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="space-y-3">
+                          <div>
+                            <h4 class="text-sm font-medium opacity-70">Uptime</h4>
+                            <p class="text-lg font-mono">{dashboardData.systemTime.uptime}</p>
+                          </div>
+                          
+                          <div>
+                            <h4 class="text-sm font-medium opacity-70">Load average</h4>
+                            <p class="text-lg font-mono">{dashboardData.systemTime.loadavg}</p>
+                          </div>
+                        </div>
+                        
+                        <div class="space-y-3">
+                          <div>
+                            <h4 class="text-sm font-medium opacity-70">Current date/time</h4>
+                            <p class="text-lg font-mono">{dashboardData.systemTime.datetime}</p>
+                          </div>
+                          
+                          <div>
+                            <h4 class="text-sm font-medium opacity-70">Last configuration change</h4>
+                            <p class="text-lg font-mono">{dashboardData.systemTime.config}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                {/if}
+                
+                {#if widgetKey === 'memory' && dashboardData.systemResources}
+                  <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body">
+                      <h3 class="card-title text-lg flex items-center gap-2">
+                        <svg class="w-5 h-5 text-indigo-500" viewBox="0 0 24 24">
+                          <path fill="currentColor" d={mdiServer} />
+                        </svg>
+                        Memory Usage
+                      </h3>
+                      <div class="divider my-2"></div>
+                      <div class="flex items-center justify-between">
+                        <div 
+                          class="radial-progress text-indigo-500" 
+                          style="--value:{memoryUsagePercent}; --size:4rem; --thickness: 8px;" 
+                          role="progressbar"
+                        >
+                          {memoryUsagePercent}%
+                        </div>
+                        <div>
+                          <p class="text-sm">
+                            <span class="font-semibold">Used:</span> 
+                            {dashboardData.systemResources.memory.used_frmt}
+                          </p>
+                          <p class="text-sm">
+                            <span class="font-semibold">Total:</span> 
+                            {dashboardData.systemResources.memory.total_frmt}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                {/if}
+                
+                {#if widgetKey === 'disk' && mainDisk}
+                  <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body">
+                      <h3 class="card-title text-lg flex items-center gap-2">
+                        <svg class="w-5 h-5 text-accent" viewBox="0 0 24 24">
+                          <path fill="currentColor" d={mdiHarddisk} />
+                        </svg>
+                        Disk Usage
+                      </h3>
+                      <div class="divider my-2"></div>
+                      <div class="flex items-center justify-between">
+                        <div 
+                          class="radial-progress text-accent" 
+                          style="--value:{mainDisk.used_pct}; --size:4rem; --thickness: 8px;" 
+                          role="progressbar"
+                        >
+                          {mainDisk.used_pct}%
+                        </div>
+                        <div>
+                          <p class="text-sm">
+                            <span class="font-semibold">Used:</span> 
+                            {mainDisk.used}
+                          </p>
+                          <p class="text-sm">
+                            <span class="font-semibold">Available:</span> 
+                            {mainDisk.available}
+                          </p>
+                          <p class="text-sm">
+                            <span class="font-semibold">Mountpoint:</span> 
+                            {mainDisk.mountpoint}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                {/if}
+                
+                {#if widgetKey === 'services' && dashboardData.services}
+                  <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body">
+                      <div class="flex justify-between items-center">
+                        <h3 class="card-title text-lg flex items-center gap-2">
+                          <svg class="w-5 h-5 text-secondary" viewBox="0 0 24 24">
+                            <path fill="currentColor" d={mdiServerNetwork} />
+                          </svg>
+                          Services
+                          <span class="badge badge-sm ml-2">
+                            {dashboardData.services.rows.length}
+                          </span>
+                        </h3>
+                        <button 
+                          class="btn btn-ghost btn-sm" 
+                          on:click={toggleServicesExpansion}
+                        >
+                          <svg class="w-5 h-5" viewBox="0 0 24 24">
+                            <path 
+                              fill="currentColor" 
+                              d={expandedServices ? mdiChevronUp : mdiChevronDown} 
+                            />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {#if expandedServices}
+                        <div class="divider my-2"></div>
+                        <div class="space-y-3">
+                          {#each dashboardData.services.rows as service}
+                            <div 
+                              class="border rounded-lg p-3 
+                              {service.running ? 'bg-success/10 border-success/30' : 'bg-error/10 border-error/30'}"
+                            >
+                              <div class="grid grid-cols-[1fr,auto] gap-2 items-center">
+                                <div class="min-w-0 overflow-hidden">
+                                  <div class="font-medium truncate" title={service.name}>
+                                    {service.name}
+                                  </div>
+                                  <div class="text-sm opacity-70 truncate" title={service.description}>
+                                    {service.description}
+                                  </div>
+                                </div>
+                                <div class="flex items-center space-x-2 shrink-0">
+                                  <span 
+                                    class="badge whitespace-nowrap {service.running ? 'badge-success' : 'badge-error'}"
+                                  >
+                                    {service.running ? 'Running' : 'Stopped'}
+                                  </span>
+                                  <button 
+                                    class="btn btn-ghost btn-sm shrink-0" 
+                                    on:click={() => restartService(service.id)}
+                                    title="Restart Service"
+                                    aria-label="Restart {service.name} Service"
+                                  >
+                                    <svg class="w-5 h-5" viewBox="0 0 24 24">
+                                      <path fill="currentColor" d={mdiRestart} />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
+                  </div>
+                {/if}
+              {/if}
+            {/each}
+          </div>
         </div>
       {:else}
         <div class="flex justify-center items-center h-64">
