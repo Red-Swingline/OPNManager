@@ -21,12 +21,19 @@
   import { page } from "$app/stores";
   import { invoke } from "@tauri-apps/api/core";
   import { toasts } from "$lib/stores/toastStore";
+  import { onMount } from "svelte";
+  
+  // Add iOS-specific scroll handling
+  import { setupIOSScrolling } from "$lib/utils/iosScrollManager";
 
   export let title = "OPNManager";
   let isSidebarOpen = false;
   let isRebootDialogOpen = false;
   let theme = "light";
   let expandedCategories = { unbound: false };
+  
+  // Add scroll manager reference
+  let scrollManager;
 
   const menuItems = [
     { path: "/", icon: mdiHome, label: "Home" },
@@ -111,9 +118,24 @@
   function isInCategory(category) {
     return category.items && category.items.some(item => $page.url.pathname === item.path);
   }
+  
+  onMount(() => {
+    // Initialize the iOS scroll manager
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window).MSStream;
+    if (isIOS) {
+      scrollManager = setupIOSScrolling();
+    }
+    
+    return () => {
+      // Clean up when component is destroyed
+      if (scrollManager && scrollManager.cleanup) {
+        scrollManager.cleanup();
+      }
+    };
+  });
 </script>
 
-<div class="flex h-screen bg-base-200">
+<div class="flex h-screen bg-base-200" id="app-layout-container">
   <!-- Sidebar -->
   <aside class="hidden lg:flex flex-col w-64 bg-base-100">
     <div class="flex items-center justify-center h-16 bg-primary">
@@ -202,8 +224,8 @@
 
   <!-- Main content -->
   <div class="flex-1 flex flex-col overflow-hidden">
-    <!-- Top navbar -->
-    <header class="bg-base-100 border-b border-base-300">
+    <!-- Top navbar - using fixed-header class -->
+    <header class="bg-base-100 border-b border-base-300 fixed-header">
       <div class="flex items-center justify-between p-4">
         <div class="flex items-center space-x-4">
           <button
@@ -233,8 +255,8 @@
       </div>
     </header>
 
-    <!-- Page content -->
-    <main class="flex-1 overflow-y-auto bg-base-200 p-6">
+    <!-- Page content - using page-content class -->
+    <main class="flex-1 overflow-y-auto bg-base-200 p-6 page-content">
       <slot></slot>
     </main>
   </div>
@@ -256,7 +278,7 @@
       <div class="flex items-center justify-center h-16 bg-primary">
         <span class="text-xl font-bold text-primary-content">{title}</span>
       </div>
-      <nav class="mt-5">
+      <nav class="mt-5 overflow-y-auto" style="max-height: calc(100% - 64px)">
         <ul class="p-2 space-y-2">
           {#each menuItems as item}
             {#if item.category}
@@ -420,3 +442,47 @@
     </div>
   {/if}
 </div>
+
+<style>
+  /* iOS scrolling fixes */
+  @supports (-webkit-touch-callout: none) {
+    /* Add extra padding at the bottom of page content to help with "reachability" */
+    .page-content {
+      padding-bottom: 80px !important;
+    }
+    
+    /* Ensure the fixed header doesn't disappear during scroll */
+    .fixed-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: blur(8px);
+    }
+    
+    /* Prevent "bounce" effect on the main layout container */
+    #app-layout-container {
+      height: 100%;
+      overflow: hidden;
+    }
+    
+    /* Adjusted scrolling for the main content area */
+    .page-content {
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: none;
+    }
+    
+    /* Fix the height in iOS */
+    .min-h-screen {
+      min-height: -webkit-fill-available;
+    }
+  }
+  
+  /* Original styles */
+  .btn-circle {
+    @apply rounded-full w-14 h-14 p-0 grid place-items-center;
+  }
+
+  .btn-lg {
+    @apply w-16 h-16;
+  }
+</style>

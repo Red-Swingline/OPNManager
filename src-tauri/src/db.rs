@@ -36,6 +36,8 @@ impl Database {
             .path()
             .app_local_data_dir()
             .expect("Failed to get app local data dir");
+        std::fs::create_dir_all(&app_dir).expect("Failed to create app data dir");
+
         let db_path = app_dir.join("app.db");
 
         let conn = Connection::open(db_path)?;
