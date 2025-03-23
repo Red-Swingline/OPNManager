@@ -335,7 +335,7 @@
           <svg class="w-5 h-5" viewBox="0 0 24 24">
             <path fill="currentColor" d={mdiViewDashboardEditOutline} />
           </svg>
-          {$dashboardStore.isEditing ? "Done Editing" : "Customize Dashboard"}
+          {$dashboardStore.isEditing ? "Done Editing" : "Edit Dashboard"}
         </button>
       </div>
 
