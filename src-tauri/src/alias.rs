@@ -271,7 +271,7 @@ pub async fn delete_alias(database: State<'_, Database>, uuid: String) -> Result
                     .unwrap_or_else(|_| "Unknown error".to_string());
                 if error_text.contains("Alias in use") || error_text.contains("Currently in use by")
                 {
-                    Err(format!("Cannot delete this alias because it is currently in use by firewall rules. Please remove references to this alias in your firewall rules first."))
+                    Err("Cannot delete this alias because it is currently in use by firewall rules. Please remove references to this alias in your firewall rules first.".to_string())
                 } else {
                     Err(format!("Server returned error: {}", error_text))
                 }

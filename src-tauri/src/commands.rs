@@ -154,7 +154,7 @@ pub fn update_pin(
         return Err("New PIN and confirmation do not match".to_string());
     }
 
-    let result = database.update_pin(&current_pin, &new_pin)?;
+    database.update_pin(&current_pin, &new_pin)?;
     pin_cache.set_pin(new_pin);
 
     Ok(())

@@ -575,8 +575,7 @@ impl Database {
             if pin_hash.is_none() {
                 return Err(rusqlite::Error::InvalidParameterName(
                     "No PIN available for encryption".to_string(),
-                )
-                .into());
+                ));
             }
 
             let pin = self.get_cached_pin().map_err(|e| {
@@ -660,7 +659,7 @@ impl Database {
 
         if rows_affected == 0 {
             tx.rollback()?;
-            return Err(rusqlite::Error::QueryReturnedNoRows.into());
+            return Err(rusqlite::Error::QueryReturnedNoRows);
         }
 
         tx.commit()?;

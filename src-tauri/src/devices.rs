@@ -141,10 +141,8 @@ pub async fn get_combined_devices(
                 if !existing_device.ipv6_addresses.contains(&device.ip) {
                     existing_device.ipv6_addresses.push(device.ip);
                 }
-            } else {
-                if !existing_device.ipv4_addresses.contains(&device.ip) {
-                    existing_device.ipv4_addresses.push(device.ip);
-                }
+            } else if !existing_device.ipv4_addresses.contains(&device.ip) {
+                existing_device.ipv4_addresses.push(device.ip);
             }
 
             if existing_device.hostname.is_empty() && !device.hostname.is_empty() {
@@ -185,10 +183,8 @@ pub async fn get_combined_devices(
                 if !existing_device.ipv6_addresses.contains(&device.ip) {
                     existing_device.ipv6_addresses.push(device.ip);
                 }
-            } else {
-                if !existing_device.ipv4_addresses.contains(&device.ip) {
-                    existing_device.ipv4_addresses.push(device.ip);
-                }
+            } else if !existing_device.ipv4_addresses.contains(&device.ip) {
+                existing_device.ipv4_addresses.push(device.ip);
             }
 
             if existing_device.manufacturer.is_empty() && !device.manufacturer.is_empty() {
