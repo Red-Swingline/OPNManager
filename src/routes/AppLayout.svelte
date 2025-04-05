@@ -15,6 +15,7 @@
     mdiDnsOutline,
     mdiChevronDown,
     mdiChevronUp,
+    mdiImageMultiple,
   } from "@mdi/js";
   import { goto } from "$app/navigation";
   import { authStore } from "$lib/stores/authStore";
@@ -42,6 +43,7 @@
     { path: "/routes", icon: mdiMapMarkerPath, label: "Routes" },
     { path: "/rules", icon: mdiWallFire, label: "Firewall Rules" },
     { path: "/logs", icon: mdiTextBoxSearch, label: "Firewall Logs" },
+    { path: "/snapshots", icon: mdiImageMultiple, label: "ZFS Snapshots" },
     {
       category: "unbound",
       icon: mdiDnsOutline,
