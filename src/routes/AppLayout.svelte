@@ -17,6 +17,7 @@
     mdiChevronUp,
     mdiImageMultiple,
     mdiEthernet,
+    mdiGraphOutline,
   } from "@mdi/js";
   import { goto } from "$app/navigation";
   import { authStore } from "$lib/stores/authStore";
@@ -41,6 +42,7 @@
     { path: "/", icon: mdiHome, label: "Home" },
     { path: "/devices", icon: mdiRouter, label: "Devices" },
     { path: "/interfaces", icon: mdiEthernet, label: "Interfaces" },
+    { path: "/topology", icon: mdiGraphOutline, label: "Network Topology" },
     { path: "/alias", icon: mdiShieldSearch, label: "Alias" },
     { path: "/routes", icon: mdiMapMarkerPath, label: "Routes" },
     { path: "/rules", icon: mdiWallFire, label: "Firewall Rules" },
