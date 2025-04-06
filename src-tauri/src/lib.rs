@@ -6,6 +6,7 @@ mod devices;
 mod firewall;
 mod firewall_logs;
 mod http_client;
+mod interfaces;
 mod pin_cache;
 mod power;
 mod routes;
@@ -121,6 +122,8 @@ pub fn run() {
             unbound::add_dnsbl_cron_job,
             unbound::delete_dnsbl_cron_job,
             unbound::apply_cron_changes,
+            interfaces::get_interfaces,
+            interfaces::get_interface_details,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
