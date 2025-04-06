@@ -53,17 +53,33 @@
     }
   }
 
-  function handleElementSelect(detail: { element: Interface | CombinedDevice, type: 'interface' | 'device' }) {
+  function handleElementSelect(event) {
+    console.log("Element selected event received in +page.svelte:", event);
+    
+    // Check if detail is directly on the event or inside event.detail
+    const detail = event.detail || event;
+    
     console.log("Element selected:", detail.type, detail.element);
-    selectedElement = detail.element;
-    showDetailsPanel = true;
+    
+    // DEBUG: Let's verify what we're getting
+    if (detail && detail.element) {
+      console.log("*** SETTING selectedElement to:", detail.element);
+      console.log("*** Element has properties:", Object.keys(detail.element));
+      
+      // Set both state variables and force re-render
+      selectedElement = detail.element;
+      showDetailsPanel = true;
+      
+      console.log("*** AFTER setting: selectedElement=", selectedElement, "showDetailsPanel=", showDetailsPanel);
+    } else {
+      console.error("Missing element in event detail:", detail);
+    }
   }
 
   function closeDetailsPanel() {
+    console.log('Closing details panel');
     showDetailsPanel = false;
-    setTimeout(() => {
-      selectedElement = null;
-    }, 300);
+    selectedElement = null; // Remove timeout to ensure immediate cleanup
   }
   
   function toggleInterface(ifaceName: string) {
@@ -99,6 +115,11 @@
   
   // Count total active interfaces for UI
   $: totalActiveInterfaces = getActiveInterfaces().length;
+  
+  // Log filter changes
+  $: if (filteredInterfaces.length > 0) {
+    console.log(`Filter changed: showing ${filteredInterfaces.length} interfaces`);
+  }
 </script>
 
 <AppLayout>
@@ -214,7 +235,12 @@
           <TopologyMap
             interfaces={filteredInterfaces}
             devices={devices}
-            on:elementSelect={e => handleElementSelect(e.detail)}
+            onElementSelect={(element, type) => {
+              console.log('Direct callback from TopologyMap:', type, element);
+              selectedElement = element;
+              showDetailsPanel = true;
+            }}
+            on:elementSelect={handleElementSelect}
           />
         </div>
         
@@ -222,7 +248,7 @@
           <div class="bg-base-100 rounded-lg shadow-md h-[calc(100vh-12rem)] overflow-hidden">
             <TopologyDetails
               element={selectedElement}
-              elementType={selectedElement.hasOwnProperty('intf') ? 'device' : 'interface'}
+              elementType={selectedElement && selectedElement.intf ? 'device' : 'interface'}
               onClose={closeDetailsPanel}
             />
           </div>
@@ -231,20 +257,25 @@
       
       <!-- Mobile view: Map with overlay details panel -->
       <div class="lg:hidden relative">
-        <div class="bg-base-100 rounded-lg shadow-md overflow-hidden h-[calc(100vh-12rem)]">
+        <div class="bg-base-100 rounded-lg shadow-md overflow-hidden h-[calc(100vh-12rem)] md:h-[calc(100vh-14rem)]">
           <TopologyMap
             interfaces={filteredInterfaces}
             devices={devices}
-            on:elementSelect={e => handleElementSelect(e.detail)}
+            onElementSelect={(element, type) => {
+              console.log('Direct callback from TopologyMap:', type, element);
+              selectedElement = element;
+              showDetailsPanel = true;
+            }}
+            on:elementSelect={handleElementSelect}
           />
         </div>
         
         {#if showDetailsPanel && selectedElement}
-          <div class="absolute top-0 left-0 right-0 bottom-0 z-10">
-            <div class="bg-base-100 rounded-lg shadow-lg overflow-hidden h-[calc(100vh-12rem)]" style="opacity: 0.98;">
+          <div class="absolute top-0 left-0 right-0 bottom-0 z-50">
+            <div class="bg-base-100 rounded-lg shadow-lg overflow-hidden h-[calc(100vh-12rem)] md:h-[calc(100vh-14rem)]" style="opacity: 0.98;">
               <TopologyDetails
                 element={selectedElement}
-                elementType={selectedElement.hasOwnProperty('intf') ? 'device' : 'interface'}
+                elementType={selectedElement && selectedElement.intf ? 'device' : 'interface'}
                 onClose={closeDetailsPanel}
               />
             </div>

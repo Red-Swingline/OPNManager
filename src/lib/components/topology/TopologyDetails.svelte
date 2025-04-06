@@ -92,7 +92,13 @@
         ? (element as Interface).description || (element as Interface).device 
         : (element as CombinedDevice).hostname || "Device Details"}
     </h2>
-    <button class="btn btn-sm btn-circle" on:click={onClose}>
+    <button 
+      class="btn btn-sm btn-circle btn-error text-white"
+      on:click={() => {
+        console.log('Close button clicked');
+        if (onClose) onClose();
+      }}
+    >
       <svg class="w-4 h-4" viewBox="0 0 24 24">
         <path fill="currentColor" d={mdiClose} />
       </svg>
