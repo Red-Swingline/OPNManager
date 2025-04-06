@@ -56,7 +56,14 @@
       authStore.setConfigured(true);
       toasts.success("Initial configuration saved successfully!");
     } else {
-      await invoke("update_api_info", { profileName, apiKey, apiSecret, apiUrl, port: Number(port) });
+      await invoke("update_api_info", { 
+        profileName, 
+        apiKey, 
+        apiSecret, 
+        apiUrl, 
+        port: Number(port),
+        isDefault: true
+      });
       
       // Add this line to clear the traffic cache after updating API info
       await invoke("clear_traffic_cache");
@@ -66,6 +73,7 @@
     await loadApiInfo();
   } catch (error) {
     console.error("Failed to update API info:", error);
+    toasts.error(`Failed to update API info: ${error}`);
   }
 }
 
@@ -177,7 +185,6 @@
             showPin={isFirstRun}
             on:submit={handleApiSubmit}
             on:error={handleFormError}
-            on:success={handleFormSuccess}
           />
         </div>
       {:else if activeTab === 'pin'}

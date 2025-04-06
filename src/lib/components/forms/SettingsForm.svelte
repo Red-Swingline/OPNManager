@@ -176,7 +176,7 @@
         port,
         pin,
       });
-      dispatch("success", { message: "API information updated successfully" });
+      // Don't dispatch success here, let the parent component handle it
     } catch (error) {
       dispatch("error", { message: "Failed to update API information" });
     }
