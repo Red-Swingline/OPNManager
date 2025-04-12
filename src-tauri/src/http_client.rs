@@ -5,6 +5,7 @@ use reqwest::{
     Client, Response,
 };
 use serde_json::Value;
+use std::cmp::min;
 use std::time::Duration;
 
 pub async fn make_http_request(
@@ -45,8 +46,13 @@ pub async fn make_http_request(
     };
 
     if let (Some(key), Some(secret)) = (api_key, api_secret) {
-        let auth = general_purpose::STANDARD.encode(format!("{}:{}", key, secret));
+        let auth_string = format!("{}:{}", key, secret);
+        let auth = general_purpose::STANDARD.encode(auth_string.as_bytes());
         request_builder = request_builder.header(AUTHORIZATION, format!("Basic {}", auth));
+
+        info!("Using auth header: Basic {}...{}", 
+            &auth[..min(6, auth.len())],
+            &auth[auth.len().saturating_sub(4)..]);
     }
 
     if let Some(headers) = headers {
@@ -67,14 +73,32 @@ pub async fn make_http_request(
             } else {
                 let status = response.status();
                 let body = response.text().await.unwrap_or_else(|_| "".to_string());
-                let error_message =
-                    format!("Request to {} failed with status {}: {}", url, status, body);
+                let error_message = match status.as_u16() {
+                    401 => format!("Authentication failed (HTTP 401): Your API key or secret is incorrect"),
+                    403 => format!("Permission denied (HTTP 403): Your API credentials don't have sufficient permissions"),
+                    404 => format!("API endpoint not found (HTTP 404): Check your firewall URL and port"),
+                    _ => format!("Request to {} failed with status {}: {}", url, status, body)
+                };
+                
                 error!("{}", error_message);
                 Err(error_message)
             }
         }
         Err(e) => {
-            let error_message = format!("Request to {} failed: {}", url, e);
+            let error_message = if e.is_timeout() {
+                format!("Connection timed out: Server at {} is unreachable or not responding", url)
+            } else if e.is_connect() {
+                format!("Connection error: Unable to connect to server at {}. Check your network and firewall settings", url)
+            } else if e.is_status() {
+                format!("Invalid status: The server at {} returned an unexpected response", url)
+            } else if e.to_string().contains("dns error") {
+                format!("DNS resolution error: Could not resolve hostname in URL {}", url)
+            } else if e.to_string().contains("certificate") || e.to_string().contains("SSL") || e.to_string().contains("TLS") {
+                format!("SSL/TLS error: There was a problem with the server's security certificate at {}", url)
+            } else {
+                format!("Request to {} failed: {}", url, e)
+            };
+            
             error!("{}", error_message);
             Err(error_message)
         }

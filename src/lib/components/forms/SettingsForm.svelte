@@ -30,6 +30,7 @@
   let newApiSecret = "";
   let newApiUrl = "";
   let newPort = 443;
+  let isTestingConnection = false;
   
   // Add validation state
   let errors = {
@@ -148,6 +149,30 @@
     }
   }
 
+  async function testApiConnection(): Promise<boolean> {
+    isTestingConnection = true;
+    try {
+      await invoke("test_api_connection", {
+        apiKey,
+        apiSecret,
+        apiUrl,
+        port: Number(port),
+      });
+      return true;
+    } catch (error) {
+      console.error("Connection test failed:", error);
+      // Return the specific error so we can display it
+      if (error instanceof Error) {
+        dispatch("error", { message: `Connection failed: ${error.message}` });
+      } else {
+        dispatch("error", { message: `Connection failed: ${String(error)}` });
+      }
+      return false;
+    } finally {
+      isTestingConnection = false;
+    }
+  }
+
   async function handleSubmit(): Promise<void> {
     // Validate URL
     const urlValidation = validateUrl(apiUrl);
@@ -160,6 +185,8 @@
     apiUrl = urlValidation.formattedUrl;
     
     try {
+      // Update API info directly without testing if working with new credentials
+      // This allows replacing revoked API keys
       await invoke("update_api_info", {
         profileName: selectedProfileName,
         apiKey,
@@ -252,6 +279,27 @@
     newApiUrl = "";
     newPort = 443;
     errors.newApiUrl = "";
+  }
+
+  async function testNewApiConnection(): Promise<boolean> {
+    try {
+      await invoke("test_api_connection", {
+        apiKey: newApiKey,
+        apiSecret: newApiSecret,
+        apiUrl: newApiUrl,
+        port: Number(newPort),
+      });
+      dispatch("success", { message: "Connection test successful!" });
+      return true;
+    } catch (error) {
+      console.error("Connection test failed:", error);
+      if (error instanceof Error) {
+        dispatch("error", { message: `Connection failed: ${error.message}` });
+      } else {
+        dispatch("error", { message: `Connection failed: ${String(error)}` });
+      }
+      return false;
+    }
   }
 
   async function addNewProfile(): Promise<void> {
@@ -404,7 +452,20 @@
     {/if}
   </div>
 
-  <div class="flex justify-end">
+  <div class="flex justify-end gap-2">
+    <button 
+      type="button" 
+      class="btn btn-secondary" 
+      on:click={testApiConnection}
+      disabled={isTestingConnection}
+    >
+      {#if isTestingConnection}
+        <span class="loading loading-spinner loading-xs mr-2"></span>
+        Testing...
+      {:else}
+        Test Connection
+      {/if}
+    </button>
     <button type="submit" class="btn btn-primary">
       {showPin ? "Save Configuration" : "Update API Settings"}
     </button>
@@ -517,6 +578,11 @@
             type="button"
             class="btn btn-ghost"
             on:click={closeAddProfileModal}>Cancel</button
+          >
+          <button 
+            type="button" 
+            class="btn btn-secondary"
+            on:click={testNewApiConnection}>Test Connection</button
           >
           <button type="submit" class="btn btn-primary">Add Profile</button>
         </div>

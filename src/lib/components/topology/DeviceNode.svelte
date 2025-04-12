@@ -93,6 +93,13 @@
       cursor: pointer;
       position: relative;
       z-index: 5;
+      filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.15));
+      transition: filter 0.3s ease, transform 0.2s ease;
+    }
+    
+    .node:hover {
+      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.25));
+      transform: translateY(-2px);
     }
     
     .node-content {
@@ -106,18 +113,19 @@
       border: 2px solid white;
       position: relative;
       z-index: 5;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
     
     .node-content:hover {
-      transform: scale(1.1);
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-      transition: all 0.2s ease;
+      transform: scale(1.15);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
     }
     
     .node-icon {
-      width: 20px;
-      height: 20px;
+      width: 18px;
+      height: 18px;
       pointer-events: none; /* Ensure clicks go through to the parent */
+      filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2));
     }
     
     .node-label {
@@ -129,13 +137,22 @@
       white-space: nowrap;
       text-overflow: ellipsis;
       overflow: hidden;
-      max-width: 120px;
-      background-color: rgba(255, 255, 255, 0.9);
-      padding: 2px 5px;
-      border-radius: 4px;
+      max-width: 130px;
+      background-color: rgba(255, 255, 255, 0.95);
+      padding: 3px 8px;
+      border-radius: 6px;
       font-size: 11px;
+      font-weight: 500;
       z-index: 10;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
       pointer-events: none; /* Ensure clicks go through to the parent */
+      opacity: 1; /* Always visible */
+    }
+    
+    /* Dark theme adjustments for labels */
+    :global([data-theme="dark"]) .node-label {
+      background-color: rgba(30, 41, 59, 0.95);
+      color: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
     }
   </style>

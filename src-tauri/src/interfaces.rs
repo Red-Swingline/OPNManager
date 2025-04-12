@@ -105,7 +105,7 @@ pub async fn get_interfaces(database: State<'_, Database>) -> Result<Vec<Interfa
         
         let payload = serde_json::json!({
             "current": current_page,
-            "rowCount": 10,  // Request more to reduce pagination
+            "rowCount": 10,
             "sort": {},
             "searchPhrase": ""
         });

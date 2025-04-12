@@ -226,7 +226,7 @@
             {#if isProcessing}
               <span class="loading loading-spinner loading-sm mr-2"></span>
             {/if}
-            Save
+            Save & Apply
           </button>
         </div>
       </form>

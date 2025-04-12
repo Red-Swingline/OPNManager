@@ -288,9 +288,9 @@ pub async fn apply_alias_changes(database: State<'_, Database>) -> Result<Value,
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
-    let url = build_api_url(&api_info, "/api/firewall/alias/set");
-
-    let payload = json!({
+    // Step 1: Call the set API
+    let set_url = build_api_url(&api_info, "/api/firewall/alias/set");
+    let set_payload = json!({
         "alias": {
             "geoip": {
                 "url": ""
@@ -298,10 +298,10 @@ pub async fn apply_alias_changes(database: State<'_, Database>) -> Result<Value,
         }
     });
 
-    let response = make_http_request(
+    let set_response = make_http_request(
         "POST",
-        &url,
-        Some(payload),
+        &set_url,
+        Some(set_payload),
         None,
         Some(30),
         Some(&api_info.api_key),
@@ -309,10 +309,34 @@ pub async fn apply_alias_changes(database: State<'_, Database>) -> Result<Value,
     )
     .await?;
 
-    response
+    let set_result = set_response
         .json::<Value>()
         .await
-        .map_err(|e| format!("Failed to parse response: {}", e))
+        .map_err(|e| format!("Failed to parse set response: {}", e))?;
+
+    // Step 2: Call the reconfigure API to apply the changes
+    let reconfigure_url = build_api_url(&api_info, "/api/firewall/alias/reconfigure");
+    let reconfigure_payload = json!({});
+
+    let reconfigure_response = make_http_request(
+        "POST",
+        &reconfigure_url,
+        Some(reconfigure_payload),
+        None,
+        Some(30),
+        Some(&api_info.api_key),
+        Some(&api_info.api_secret),
+    )
+    .await?;
+
+    // Return the result of the reconfigure call, or the set result if reconfigure fails
+    match reconfigure_response.json::<Value>().await {
+        Ok(reconfigure_result) => Ok(reconfigure_result),
+        Err(e) => {
+            eprintln!("Failed to parse reconfigure response: {}", e);
+            Ok(set_result) // Return the set result as a fallback
+        }
+    }
 }
 
 async fn get_alias_info(api_info: &crate::db::ApiInfo, uuid: &str) -> Result<Value, String> {

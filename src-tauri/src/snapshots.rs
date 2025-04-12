@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::State;
 
-/// Struct to represent a ZFS snapshot
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Snapshot {
     pub uuid: String,
@@ -17,7 +16,6 @@ pub struct Snapshot {
     pub created: i64,
 }
 
-/// Response from the snapshots search API
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SnapshotSearchResponse {
     pub total: u32,
@@ -26,19 +24,16 @@ pub struct SnapshotSearchResponse {
     pub rows: Vec<Snapshot>,
 }
 
-/// Response for new snapshot creation
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NewSnapshotResponse {
     pub name: String,
     pub uuid: String,
 }
 
-/// Helper function to build API URLs
 fn build_api_url(api_info: &crate::db::ApiInfo, endpoint: &str) -> String {
     format!("{}:{}{}", api_info.api_url, api_info.port, endpoint)
 }
 
-/// Check if ZFS snapshots are supported on the system
 #[tauri::command]
 pub async fn is_snapshots_supported(database: State<'_, Database>) -> Result<bool, String> {
     let api_info = database
@@ -71,7 +66,6 @@ pub async fn is_snapshots_supported(database: State<'_, Database>) -> Result<boo
     }
 }
 
-/// Get a list of all ZFS snapshots
 #[tauri::command]
 pub async fn get_snapshots(
     current_page: u32,
@@ -109,7 +103,6 @@ pub async fn get_snapshots(
         .map_err(|e| format!("Failed to parse snapshots: {}", e))
 }
 
-/// Get information for a new snapshot (name generator)
 #[tauri::command]
 pub async fn get_new_snapshot(database: State<'_, Database>) -> Result<NewSnapshotResponse, String> {
     let api_info = database
@@ -136,7 +129,6 @@ pub async fn get_new_snapshot(database: State<'_, Database>) -> Result<NewSnapsh
         .map_err(|e| format!("Failed to get new snapshot info: {}", e))
 }
 
-/// Get information for an existing snapshot
 #[tauri::command]
 pub async fn get_snapshot(
     uuid: String,
@@ -149,8 +141,7 @@ pub async fn get_snapshot(
         .ok_or_else(|| "API info not found".to_string())?;
 
     let mut url = build_api_url(&api_info, &format!("/api/core/snapshots/get/{}", uuid));
-    
-    // If fetch_mode is provided (e.g., "copy" for cloning), add it as a query parameter
+
     if let Some(mode) = fetch_mode {
         url = format!("{}?fetchmode={}", url, mode);
     }
@@ -172,7 +163,6 @@ pub async fn get_snapshot(
         .map_err(|e| format!("Failed to get snapshot: {}", e))
 }
 
-/// Create a new snapshot
 #[tauri::command]
 pub async fn add_snapshot(
     name: String,
@@ -186,7 +176,6 @@ pub async fn add_snapshot(
 
     let url = build_api_url(&api_info, "/api/core/snapshots/add/");
 
-    // If UUID is provided, this is a clone operation
     let payload = match uuid {
         Some(id) => json!({
             "uuid": id,
@@ -217,7 +206,6 @@ pub async fn add_snapshot(
         .map_err(|e| format!("Failed to add snapshot: {}", e))
 }
 
-/// Delete a snapshot
 #[tauri::command]
 pub async fn delete_snapshot(
     uuid: String,
@@ -247,7 +235,6 @@ pub async fn delete_snapshot(
         .map_err(|e| format!("Failed to delete snapshot: {}", e))
 }
 
-/// Activate a ZFS snapshot
 #[tauri::command]
 pub async fn activate_snapshot(
     uuid: String,
@@ -277,7 +264,6 @@ pub async fn activate_snapshot(
         .map_err(|e| format!("Failed to activate snapshot: {}", e))
 }
 
-/// Update a ZFS snapshot's name
 #[tauri::command]
 pub async fn update_snapshot(
     uuid: String,

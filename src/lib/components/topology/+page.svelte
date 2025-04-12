@@ -123,43 +123,43 @@
 </script>
 
 <AppLayout>
-  <div class="flex flex-col h-full topology-page-container">
-    <div class="flex flex-wrap justify-between items-center px-2 py-1 gap-2">
+  <div class="p-4">
+    <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
       <h1 class="text-2xl font-bold">Network Topology</h1>
       
       <div class="flex flex-wrap gap-2">
         <!-- Interface selection dropdown -->
         <div class="dropdown dropdown-end">
           <button 
-            class="btn btn-sm btn-primary text-white flex items-center gap-1" 
+            class="btn btn-sm btn-outline flex items-center gap-1" 
             on:click={toggleFilterDropdown}
           >
-            <span>Interfaces</span>
+            <span>Interfaces: {selectedInterfaces.length}/{totalActiveInterfaces}</span>
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path fill="currentColor" d={mdiMenuDown} />
             </svg>
           </button>
           
           {#if isFilterDropdownOpen}
-            <div class="dropdown-content z-30 menu p-2 shadow bg-base-100 border border-base-300 rounded-box w-64 mt-1">
-              <div class="p-2 border-b border-base-300">
+            <div class="dropdown-content z-30 menu p-2 shadow bg-base-100 rounded-box w-64 mt-1">
+              <div class="p-2 border-b">
                 <label class="cursor-pointer label justify-start gap-2">
                   <input 
                     type="checkbox" 
-                    class="checkbox checkbox-sm checkbox-primary" 
+                    class="checkbox checkbox-sm" 
                     checked={selectedInterfaces.length === totalActiveInterfaces}
                     on:change={toggleAllInterfaces}
                   />
-                  <span class="label-text font-medium">Select All ({totalActiveInterfaces})</span>
+                  <span class="label-text font-medium">Select All Interfaces</span>
                 </label>
               </div>
               
-              <div class="max-h-[min(60vh,300px)] overflow-y-auto">
+              <div class="max-h-60 overflow-y-auto">
                 {#each getActiveInterfaces() as iface}
-                  <label class="cursor-pointer label justify-start gap-2 hover:bg-base-200 rounded py-2">
+                  <label class="cursor-pointer label justify-start gap-2 hover:bg-base-200 rounded">
                     <input 
                       type="checkbox" 
-                      class="checkbox checkbox-sm checkbox-primary" 
+                      class="checkbox checkbox-sm" 
                       checked={selectedInterfaces.includes(iface.device)}
                       on:change={() => toggleInterface(iface.device)}
                     />
@@ -184,7 +184,7 @@
         </div>
         
         <button 
-          class="btn btn-sm btn-primary text-white" 
+          class="btn btn-sm btn-outline" 
           on:click={fetchData}
           disabled={isLoading}
         >
@@ -229,9 +229,9 @@
         </div>
       </div>
     {:else}
-      <!-- Full width layout with modal details -->
-      <div class="relative flex-1 h-[calc(100vh-13rem)]">
-        <div class="w-full h-full overflow-hidden">
+      <!-- Desktop view: Side-by-side layout -->
+      <div class="hidden lg:grid lg:grid-cols-3 lg:gap-4">
+        <div class="lg:col-span-{showDetailsPanel ? '2' : '3'} bg-base-100 rounded-lg shadow-md overflow-hidden h-[calc(100vh-12rem)]">
           <TopologyMap
             interfaces={filteredInterfaces}
             devices={devices}
@@ -245,8 +245,34 @@
         </div>
         
         {#if showDetailsPanel && selectedElement}
-          <div class="absolute top-4 right-4 w-80 z-20">
-            <div class="bg-base-100 rounded-lg shadow-lg overflow-hidden border border-base-300">
+          <div class="bg-base-100 rounded-lg shadow-md h-[calc(100vh-12rem)] overflow-hidden">
+            <TopologyDetails
+              element={selectedElement}
+              elementType={selectedElement && selectedElement.intf ? 'device' : 'interface'}
+              onClose={closeDetailsPanel}
+            />
+          </div>
+        {/if}
+      </div>
+      
+      <!-- Mobile view: Map with overlay details panel -->
+      <div class="lg:hidden relative">
+        <div class="bg-base-100 rounded-lg shadow-md overflow-hidden h-[calc(100vh-12rem)] md:h-[calc(100vh-14rem)]">
+          <TopologyMap
+            interfaces={filteredInterfaces}
+            devices={devices}
+            onElementSelect={(element, type) => {
+              console.log('Direct callback from TopologyMap:', type, element);
+              selectedElement = element;
+              showDetailsPanel = true;
+            }}
+            on:elementSelect={handleElementSelect}
+          />
+        </div>
+        
+        {#if showDetailsPanel && selectedElement}
+          <div class="absolute top-0 left-0 right-0 bottom-0 z-50">
+            <div class="bg-base-100 rounded-lg shadow-lg overflow-hidden h-[calc(100vh-12rem)] md:h-[calc(100vh-14rem)]" style="opacity: 0.98;">
               <TopologyDetails
                 element={selectedElement}
                 elementType={selectedElement && selectedElement.intf ? 'device' : 'interface'}
@@ -256,7 +282,6 @@
           </div>
         {/if}
       </div>
-      
     {/if}
   </div>
 </AppLayout>
@@ -266,31 +291,12 @@
   .dropdown-content {
     position: absolute;
     right: 0;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
   }
   
   @media (max-width: 640px) {
     .dropdown-content {
-      width: calc(100vw - 1rem);
+      width: calc(100vw - 2rem);
       max-width: 100%;
-    }
-  }
-  
-  /* Improved dropdown styling for dark mode */
-  :global([data-theme="dark"]) .dropdown-content {
-    background-color: hsl(var(--b1));
-    border-color: rgba(255, 255, 255, 0.1);
-  }
-  
-  /* Only modify padding for topology page without affecting iOS fixes */
-  .topology-page-container {
-    padding: 0 !important;
-  }
-  
-  /* Fix controls position for iOS */
-  @supports (-webkit-touch-callout: none) {
-    .topology-page-container .h-\[calc\(100vh-13rem\)\] {
-      height: calc(100vh - 13rem - 80px) !important;
     }
   }
 </style>

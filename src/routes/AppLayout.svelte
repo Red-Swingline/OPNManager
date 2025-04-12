@@ -18,6 +18,7 @@
     mdiImageMultiple,
     mdiEthernet,
     mdiGraphOutline,
+    mdiServerNetwork,
   } from "@mdi/js";
   import { goto } from "$app/navigation";
   import { authStore } from "$lib/stores/authStore";
@@ -33,21 +34,25 @@
   let isSidebarOpen = false;
   let isRebootDialogOpen = false;
   let theme = "light";
-  let expandedCategories = { unbound: false };
+  let expandedCategories = { 
+    network: false,
+    firewall: false,
+    system: false,
+    unbound: false
+  };
 
   // Add scroll manager reference
   let scrollManager;
 
   const menuItems = [
-    { path: "/", icon: mdiHome, label: "Home" },
-    { path: "/devices", icon: mdiRouter, label: "Devices" },
-    { path: "/interfaces", icon: mdiEthernet, label: "Interfaces" },
+    { path: "/", icon: mdiHome, label: "Dashboard" },
     { path: "/topology", icon: mdiGraphOutline, label: "Network Topology" },
-    { path: "/alias", icon: mdiShieldSearch, label: "Alias" },
+    { path: "/interfaces", icon: mdiEthernet, label: "Interfaces" },
     { path: "/routes", icon: mdiMapMarkerPath, label: "Routes" },
+    { path: "/devices", icon: mdiRouter, label: "Devices" },
     { path: "/rules", icon: mdiWallFire, label: "Firewall Rules" },
     { path: "/logs", icon: mdiTextBoxSearch, label: "Firewall Logs" },
-    { path: "/snapshots", icon: mdiImageMultiple, label: "ZFS Snapshots" },
+    { path: "/alias", icon: mdiShieldSearch, label: "Alias" },
     {
       category: "unbound",
       icon: mdiDnsOutline,
@@ -56,9 +61,11 @@
         { path: "/unbound", icon: mdiDnsOutline, label: "DNS Blocklist" },
       ],
     },
+    { path: "/snapshots", icon: mdiImageMultiple, label: "ZFS Snapshots" },
     { path: "/updates", icon: mdiUpdate, label: "Updates" },
-    { path: "/settings", icon: mdiCog, label: "Settings" },
   ];
+  
+  // Admin menu items (settings, reboot, logout) - handled separately in the UI
 
   function toggleSidebar() {
     isSidebarOpen = !isSidebarOpen;
@@ -165,7 +172,7 @@
       <span class="text-xl font-bold text-primary-content">{title}</span>
     </div>
     <nav class="flex-1 overflow-y-auto">
-      <ul class="p-2 space-y-2">
+      <ul class="p-2 space-y-1">
         {#each menuItems as item}
           {#if item.category}
             <li>
@@ -226,6 +233,18 @@
           {/if}
         {/each}
         <li class="mt-auto">
+          <button
+            on:click={() => handleNavigation('/settings')}
+            class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
+            class:bg-base-300={$page.url.pathname === '/settings'}
+          >
+            <svg class="w-6 h-6" viewBox="0 0 24 24">
+              <path fill="currentColor" d={mdiCog} />
+            </svg>
+            <span>Settings</span>
+          </button>
+        </li>
+        <li>
           <button
             on:click={openRebootDialog}
             class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200 text-error"
@@ -308,7 +327,7 @@
         <span class="text-xl font-bold text-primary-content">{title}</span>
       </div>
       <nav class="mt-5 overflow-y-auto" style="max-height: calc(100% - 64px)">
-        <ul class="p-2 space-y-2">
+        <ul class="p-2 space-y-1">
           {#each menuItems as item}
             {#if item.category}
               <li>
@@ -370,6 +389,18 @@
             {/if}
           {/each}
           <li class="mt-auto">
+            <button
+              on:click={() => handleNavigation('/settings')}
+              class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
+              class:bg-base-300={$page.url.pathname === '/settings'}
+            >
+              <svg class="w-6 h-6" viewBox="0 0 24 24">
+                <path fill="currentColor" d={mdiCog} />
+              </svg>
+              <span>Settings</span>
+            </button>
+          </li>
+          <li>
             <button
               on:click={openRebootDialog}
               class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200 text-error"

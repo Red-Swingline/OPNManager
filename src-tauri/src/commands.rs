@@ -154,8 +154,13 @@ pub fn update_pin(
         return Err("New PIN and confirmation do not match".to_string());
     }
 
+    log::info!("Updating PIN in database and re-encrypting API keys");
     database.update_pin(&current_pin, &new_pin)?;
-    pin_cache.set_pin(new_pin);
+
+    log::info!("Updating PIN cache with new PIN");
+    pin_cache.set_pin(new_pin.clone());
+    
+    log::info!("PIN update completed successfully");
 
     Ok(())
 }
@@ -253,6 +258,12 @@ pub async fn test_api_connection(
     api_url: String,
     port: u16,
 ) -> Result<bool, String> {
+    info!("Testing API connection to {}:{}", api_url, port);
+    
+    if api_key.contains('+') || api_key.contains('\\') || api_secret.contains('+') || api_secret.contains('\\') {
+        info!("API key or secret contains special characters (+ or \\) that might require special handling");
+    }
+    
     if api_url.ends_with('/') {
         return Err("Invalid URL format: URL should not end with a trailing slash".to_string());
     }
@@ -262,6 +273,7 @@ pub async fn test_api_connection(
     }
 
     let url = format!("{}:{}/api/diagnostics/system/systemTime", api_url, port);
+    info!("Making connection test request to {}", url);
 
     let response = make_http_request(
         "GET",
@@ -276,15 +288,25 @@ pub async fn test_api_connection(
 
     match response {
         Ok(resp) => {
+            info!("Connection test response received, status: {}", resp.status());
             match resp.json::<Value>().await {
-                Ok(_) => Ok(true),
-                Err(e) => Err(format!(
-                    "Connection succeeded but returned invalid data: {}",
-                    e
-                )),
+                Ok(json) => {
+                    info!("Successfully parsed JSON response");
+                    Ok(true)
+                },
+                Err(e) => {
+                    error!("Connection succeeded but returned invalid data: {}", e);
+                    Err(format!(
+                        "Connection succeeded but returned invalid data: {}",
+                        e
+                    ))
+                },
             }
         }
-        Err(e) => Err(e),
+        Err(e) => {
+            error!("Connection test failed: {}", e);
+            Err(e)
+        },
     }
 }
 

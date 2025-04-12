@@ -127,28 +127,23 @@
   }
 
   async function addIpToAlias(): Promise<void> {
-    if (!newIpAddress || !selectedAlias) return;
-
+    if (!selectedAlias) return;
+    
     isAddingIp = true;
     try {
-      const currentContent = selectedAlias.content || "";
-      const updatedContent = currentContent
-        ? `${currentContent}\n${newIpAddress}`
-        : newIpAddress;
-
+      // Save whatever is currently in the content field
       await invoke("add_ip_to_alias", {
         uuid: selectedAlias.uuid,
-        currentContent: updatedContent,
-        newIp: newIpAddress,
+        currentContent: selectedAlias.content || "",
+        newIp: "", // Not used since we're sending the full content directly
       });
 
       await refreshAliasDetails(selectedAlias.name);
-      newIpAddress = "";
-      toasts.success("IP address added successfully");
+      toasts.success("Changes saved and applied successfully");
     } catch (err) {
-      console.error("Failed to add IP address:", err);
+      console.error("Failed to save changes:", err);
       toasts.error(
-        `Failed to add IP address: ${err instanceof Error ? err.message : String(err)}`,
+        `Failed to save changes: ${err instanceof Error ? err.message : String(err)}`,
       );
     } finally {
       isAddingIp = false;
@@ -519,26 +514,43 @@
           <p class="mb-4">No IP addresses assigned to this alias.</p>
         {/if}
 
-        <div class="flex items-center mb-6">
-          <input
-            type="text"
-            placeholder="New IP Address"
-            class="input input-bordered flex-grow mr-2"
-            bind:value={newIpAddress}
-          />
-          <button
-            on:click={addIpToAlias}
-            class="btn btn-primary"
-            disabled={isAddingIp}
-          >
-            {#if isAddingIp}
-              <span class="loading loading-spinner loading-sm"></span>
-            {:else}
-              <svg class="w-6 h-6" viewBox="0 0 24 24">
-                <path fill="currentColor" d={mdiPlus} />
-              </svg>
-            {/if}
-          </button>
+        <div class="mb-6">
+          <!-- Input and Add button row -->
+          <div class="flex items-center">
+            <input
+              type="text"
+              placeholder="New IP Address"
+              class="input input-bordered flex-grow mr-2"
+              bind:value={newIpAddress}
+            />
+            <button
+              on:click={() => {
+                if (!newIpAddress) return;
+                
+                // Append to content without calling the API
+                const currentContent = selectedAlias.content || "";
+                selectedAlias = {
+                  ...selectedAlias,
+                  content: currentContent ? `${currentContent}\n${newIpAddress}` : newIpAddress
+                };
+                
+                // Clear input field
+                newIpAddress = "";
+                
+                // Show success message
+                toasts.success("IP address added. Click Save & Apply when finished.");
+              }}
+              class="btn"
+              disabled={!newIpAddress}
+            >
+              <span class="flex items-center">
+                <svg class="w-5 h-5 mr-1" viewBox="0 0 24 24">
+                  <path fill="currentColor" d={mdiPlus} />
+                </svg>
+                Add
+              </span>
+            </button>
+          </div>
         </div>
 
         <div class="flex flex-wrap gap-2 justify-end mt-4">
@@ -571,7 +583,31 @@
             Delete
           </button>
 
-          <button on:click={closeModal} class="btn btn-outline">Close</button>
+          <!-- Cancel button -->
+          <button on:click={closeModal} class="btn btn-outline">Cancel</button>
+          
+          <!-- Save & Apply button -->
+          <button
+            on:click={async () => {
+              await addIpToAlias();
+              if (!isAddingIp) {
+                closeModal();
+              }
+            }}
+            class="btn btn-primary"
+            disabled={isAddingIp}
+          >
+            {#if isAddingIp}
+              <span class="loading loading-spinner loading-sm"></span>
+            {:else}
+              <span class="flex items-center">
+                <svg class="w-5 h-5 mr-1" viewBox="0 0 24 24">
+                  <path fill="currentColor" d={mdiCheck} />
+                </svg>
+                Save & Apply
+              </span>
+            {/if}
+          </button>
         </div>
       </div>
     </div>

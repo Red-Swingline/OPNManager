@@ -164,12 +164,16 @@ pub async fn add_route(
 
     println!("Received response: {}", response_text);
 
-    serde_json::from_str(&response_text).map_err(|e| {
+    let result = serde_json::from_str(&response_text).map_err(|e| {
         format!(
             "Failed to parse response: {} (Response was: {})",
             e, response_text
         )
-    })
+    })?;
+    
+    apply_changes(database).await?;
+    
+    Ok(result)
 }
 
 #[tauri::command]
@@ -195,6 +199,8 @@ pub async fn delete_route(database: State<'_, Database>, uuid: String) -> Result
     if !response.status().is_success() {
         return Err(format!("Failed to delete route: {}", response.status()));
     }
+
+    apply_changes(database).await?;
 
     Ok(())
 }
@@ -225,10 +231,14 @@ pub async fn toggle_route(
     )
     .await?;
 
-    response
+    let result = response
         .json::<ToggleResponse>()
         .await
-        .map_err(|e| format!("Failed to parse response: {}", e))
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    apply_changes(database).await?;
+    
+    Ok(result)
 }
 
 #[tauri::command]

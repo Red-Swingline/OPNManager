@@ -1022,6 +1022,7 @@ impl Database {
     }
 
     pub fn update_pin(&self, current_pin: &str, new_pin: &str) -> Result<(), String> {
+        // First verify the current PIN
         if !self
             .verify_pin(current_pin)
             .map_err(|e| format!("Failed to verify current PIN: {}", e))?
@@ -1030,34 +1031,30 @@ impl Database {
         }
 
         log::info!("Current PIN verified successfully, proceeding with PIN update");
-
+        
+        // Get all API profiles to re-encrypt
         let api_profiles = self
             .list_api_profiles()
             .map_err(|e| format!("Failed to list API profiles: {}", e))?;
 
+        // Get the decrypted profiles using the current PIN
         let mut decrypted_profiles = Vec::new();
-
         for profile in &api_profiles {
             match self.get_api_info(Some(&profile.profile_name)) {
                 Ok(Some(api_info)) => {
-                    log::info!(
-                        "Successfully retrieved credentials for profile: {}",
-                        profile.profile_name
-                    );
+                    log::info!("Successfully retrieved credentials for profile: {}", profile.profile_name);
                     decrypted_profiles.push(api_info);
                 }
                 _ => {
-                    log::warn!(
-                        "Failed to get credentials for profile: {}",
-                        profile.profile_name
-                    );
+                    log::warn!("Failed to get credentials for profile: {}", profile.profile_name);
                 }
             }
         }
-
-        let new_hash =
-            Self::hash_password(new_pin).map_err(|e| format!("Failed to hash new PIN: {}", e))?;
-
+        
+        // Generate the new PIN hash
+        let new_hash = Self::hash_password(new_pin).map_err(|e| format!("Failed to hash new PIN: {}", e))?;
+        
+        // Update the PIN hash in the database
         {
             let conn = self.conn.lock().unwrap();
             conn.execute(
@@ -1067,25 +1064,26 @@ impl Database {
             .map_err(|e| format!("Failed to update PIN hash: {}", e))?;
         }
 
+        // Clear encryption key from memory
         {
             let mut current_key = self.current_pin_key.lock().unwrap();
             *current_key = None;
         }
+        
+        // Temporarily store the new PIN in the cache for re-encryption
+        let old_pin = self.pin_cache.get_pin().clone(); // Save old PIN value
+        self.pin_cache.set_pin(new_pin.to_string());    // Set new PIN for re-encryption
+        
+        log::info!("Re-saving {} profiles with new PIN", decrypted_profiles.len());
 
-        if !self
-            .verify_pin(new_pin)
-            .map_err(|e| format!("Failed to verify new PIN: {}", e))?
-        {
-            return Err("Something went wrong with the new PIN setup".to_string());
-        }
-
-        log::info!(
-            "Re-saving {} profiles with new PIN",
-            decrypted_profiles.len()
-        );
-
+        // Re-encrypt all API profiles with the new PIN
         for api_info in decrypted_profiles {
             self.save_api_info(&api_info).map_err(|e| {
+                // If we fail, restore the old PIN in the cache
+                if let Some(old) = &old_pin {
+                    self.pin_cache.set_pin(old.clone());
+                }
+                
                 format!(
                     "Failed to save API info for profile '{}': {}",
                     api_info.profile_name, e
@@ -1095,8 +1093,8 @@ impl Database {
             log::info!("Re-saved profile: {}", api_info.profile_name);
         }
 
-        log::info!("PIN updated successfully. All applicable API credentials were re-encrypted.");
-
+        log::info!("PIN updated successfully. All API credentials re-encrypted with new PIN");
+        
         Ok(())
     }
     pub fn get_dashboard_preferences(

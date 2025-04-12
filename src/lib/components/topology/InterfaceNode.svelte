@@ -82,6 +82,13 @@
       cursor: pointer;
       position: relative;
       z-index: 5;
+      filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.2));
+      transition: filter 0.3s ease, transform 0.2s ease;
+    }
+    
+    .node:hover {
+      filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.3));
+      transform: translateY(-3px);
     }
     
     .node-content {
@@ -91,22 +98,23 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-      border: 2px solid white;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+      border: 3px solid white;
       position: relative;
       z-index: 5;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
     
     .node-content:hover {
-      transform: scale(1.1);
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-      transition: all 0.2s ease;
+      transform: scale(1.15);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
     }
     
     .node-icon {
-      width: 20px;
-      height: 20px;
+      width: 22px;
+      height: 22px;
       pointer-events: none; /* Ensure clicks go through to the parent */
+      filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
     }
     
     .node-label {
@@ -114,18 +122,63 @@
       top: 100%;
       left: 50%;
       transform: translateX(-50%);
-      margin-top: 5px;
+      margin-top: 6px;
       white-space: nowrap;
       text-overflow: ellipsis;
       overflow: hidden;
-      max-width: 150px;
-      background-color: rgba(255, 255, 255, 0.9);
-      padding: 3px 6px;
-      border-radius: 4px;
+      max-width: 160px;
+      background-color: rgba(255, 255, 255, 0.97);
+      padding: 4px 10px;
+      border-radius: 8px;
       font-size: 12px;
       z-index: 20;
-      font-weight: 500;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+      font-weight: 600;
+      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
       pointer-events: none; /* Ensure clicks go through to the parent */
+      opacity: 1; /* Always visible */
+    }
+    
+    /* Dark theme adjustments for labels */
+    :global([data-theme="dark"]) .node-label {
+      background-color: rgba(30, 41, 59, 0.95);
+      color: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+    }
+    
+    /* Add pulsing effect for active interfaces */
+    .node-content::after {
+      content: '';
+      position: absolute;
+      top: -4px;
+      left: -4px;
+      right: -4px;
+      bottom: -4px;
+      border-radius: 50%;
+      background: transparent;
+      border: 2px solid currentColor;
+      opacity: 0;
+      z-index: -1;
+    }
+    
+    /* Only add the pulse animation to 'up' interfaces */
+    .node:has([style*="#4CAF50"]) .node-content::after {
+      animation: pulse 2s infinite;
+      opacity: 0.6;
+      border-color: #4CAF50;
+    }
+    
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+        opacity: 0.6;
+      }
+      70% {
+        transform: scale(1.1);
+        opacity: 0;
+      }
+      100% {
+        transform: scale(1.2);
+        opacity: 0;
+      }
     }
   </style>

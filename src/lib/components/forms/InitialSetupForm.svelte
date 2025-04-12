@@ -605,11 +605,43 @@
                 <span>Connection successful! Your API credentials are valid.</span>
               </div>
             {:else if connectionTestStatus === "error"}
-              <div class="alert alert-error py-2 text-sm">
-                <svg class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24">
-                  <path fill="currentColor" d={mdiLanDisconnect} />
-                </svg>
-                <span>Connection failed. Please check your settings.</span>
+              <div class="alert alert-error py-2 text-sm flex flex-col items-start">
+                <div class="flex">
+                  <svg class="h-4 w-4 flex-shrink-0 mt-1 mr-2" viewBox="0 0 24 24">
+                    <path fill="currentColor" d={mdiLanDisconnect} />
+                  </svg>
+                  <div>
+                    <span class="font-semibold">Connection failed. Here's what might be wrong:</span>
+                    
+                    {#if connectionErrorMessage}
+                      <div class="mt-1 text-xs whitespace-pre-line">{connectionErrorMessage}</div>
+                    {/if}
+                    
+                    <div class="mt-2 text-xs">
+                      <p class="font-medium">Troubleshooting tips:</p>
+                      <ul class="list-disc ml-4 mt-1 space-y-1">
+                        {#if connectionErrorMessage?.includes('Authentication failed')}
+                          <li>Double-check your API key and secret for typos</li>
+                          <li>Verify you're using the correct credentials from OPNsense</li>
+                        {:else if connectionErrorMessage?.includes('DNS resolution')}
+                          <li>Check if the hostname is spelled correctly</li>
+                          <li>Try using an IP address instead of a hostname</li>
+                        {:else if connectionErrorMessage?.includes('SSL/TLS')}
+                          <li>This is normal for self-signed certificates</li>
+                          <li>We automatically accept self-signed certificates</li>
+                        {:else if connectionErrorMessage?.includes('timeout') || connectionErrorMessage?.includes('Unable to connect')}
+                          <li>Verify your firewall URL and port</li>
+                          <li>Check that you're on the same network as your firewall</li>
+                          <li>Make sure your firewall's API is enabled and accessible</li>
+                        {:else}
+                          <li>Verify your firewall URL and port</li>
+                          <li>Confirm your API key and secret are correct</li>
+                          <li>Ensure you can access your firewall's web interface</li>
+                        {/if}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
               </div>
             {:else}
               <div class="alert alert-warning py-2 text-sm">

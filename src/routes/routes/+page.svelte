@@ -110,11 +110,10 @@
 
             console.log("Add route result:", result);
 
-            // Automatically apply changes
-            await invoke("apply_changes");
+            // No need to apply changes anymore, it's done in the backend
             await loadRoutes();
             closeAddModal();
-            toasts.success("Route added successfully");
+            toasts.success("Route added and applied successfully");
         } catch (error) {
             console.error("Failed to add route:", error);
             toasts.error(`Failed to add route: ${error}`);
@@ -156,13 +155,13 @@
                 }
             }
 
-            await invoke("apply_changes");
+            // No need to apply changes anymore, it's done in the backend
             await loadRoutes();
             closeDeleteConfirmation();
             toasts.success(
                 selectedRoute
-                    ? "Route deleted successfully"
-                    : "Routes deleted successfully",
+                    ? "Route deleted and applied successfully"
+                    : "Routes deleted and applied successfully",
             );
         } catch (error) {
             console.error("Failed to delete route(s):", error);
@@ -183,10 +182,10 @@
                 }
             }
 
-            await invoke("apply_changes");
+            // No need to apply changes anymore, it's done in the backend
             await loadRoutes();
             closeToggleConfirmation();
-            toasts.success("Route(s) toggled successfully");
+            toasts.success("Route(s) toggled and applied successfully");
         } catch (error) {
             console.error("Failed to toggle route(s):", error);
             toasts.error(`Failed to toggle route(s): ${error}`);
@@ -415,7 +414,7 @@
                                 : ''}"
                             disabled={isActionLoading}
                         >
-                            Add Route
+                            Save & Apply
                         </button>
                     </div>
                 </form>
@@ -450,7 +449,7 @@
                         on:click={handleDeleteRoute}
                         disabled={isActionLoading}
                     >
-                        Delete
+                        Delete & Apply
                     </button>
                 </div>
             </div>
@@ -487,7 +486,7 @@
                         on:click={handleToggleRoute}
                         disabled={isActionLoading}
                     >
-                        Continue
+                        Save & Apply
                     </button>
                 </div>
             </div>
