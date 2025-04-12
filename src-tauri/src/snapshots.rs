@@ -104,7 +104,9 @@ pub async fn get_snapshots(
 }
 
 #[tauri::command]
-pub async fn get_new_snapshot(database: State<'_, Database>) -> Result<NewSnapshotResponse, String> {
+pub async fn get_new_snapshot(
+    database: State<'_, Database>,
+) -> Result<NewSnapshotResponse, String> {
     let api_info = database
         .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
@@ -207,10 +209,7 @@ pub async fn add_snapshot(
 }
 
 #[tauri::command]
-pub async fn delete_snapshot(
-    uuid: String,
-    database: State<'_, Database>,
-) -> Result<Value, String> {
+pub async fn delete_snapshot(uuid: String, database: State<'_, Database>) -> Result<Value, String> {
     let api_info = database
         .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?

@@ -1031,7 +1031,7 @@ impl Database {
         }
 
         log::info!("Current PIN verified successfully, proceeding with PIN update");
-        
+
         // Get all API profiles to re-encrypt
         let api_profiles = self
             .list_api_profiles()
@@ -1042,18 +1042,25 @@ impl Database {
         for profile in &api_profiles {
             match self.get_api_info(Some(&profile.profile_name)) {
                 Ok(Some(api_info)) => {
-                    log::info!("Successfully retrieved credentials for profile: {}", profile.profile_name);
+                    log::info!(
+                        "Successfully retrieved credentials for profile: {}",
+                        profile.profile_name
+                    );
                     decrypted_profiles.push(api_info);
                 }
                 _ => {
-                    log::warn!("Failed to get credentials for profile: {}", profile.profile_name);
+                    log::warn!(
+                        "Failed to get credentials for profile: {}",
+                        profile.profile_name
+                    );
                 }
             }
         }
-        
+
         // Generate the new PIN hash
-        let new_hash = Self::hash_password(new_pin).map_err(|e| format!("Failed to hash new PIN: {}", e))?;
-        
+        let new_hash =
+            Self::hash_password(new_pin).map_err(|e| format!("Failed to hash new PIN: {}", e))?;
+
         // Update the PIN hash in the database
         {
             let conn = self.conn.lock().unwrap();
@@ -1069,12 +1076,15 @@ impl Database {
             let mut current_key = self.current_pin_key.lock().unwrap();
             *current_key = None;
         }
-        
+
         // Temporarily store the new PIN in the cache for re-encryption
         let old_pin = self.pin_cache.get_pin().clone(); // Save old PIN value
-        self.pin_cache.set_pin(new_pin.to_string());    // Set new PIN for re-encryption
-        
-        log::info!("Re-saving {} profiles with new PIN", decrypted_profiles.len());
+        self.pin_cache.set_pin(new_pin.to_string()); // Set new PIN for re-encryption
+
+        log::info!(
+            "Re-saving {} profiles with new PIN",
+            decrypted_profiles.len()
+        );
 
         // Re-encrypt all API profiles with the new PIN
         for api_info in decrypted_profiles {
@@ -1083,7 +1093,7 @@ impl Database {
                 if let Some(old) = &old_pin {
                     self.pin_cache.set_pin(old.clone());
                 }
-                
+
                 format!(
                     "Failed to save API info for profile '{}': {}",
                     api_info.profile_name, e
@@ -1094,7 +1104,7 @@ impl Database {
         }
 
         log::info!("PIN updated successfully. All API credentials re-encrypted with new PIN");
-        
+
         Ok(())
     }
     pub fn get_dashboard_preferences(

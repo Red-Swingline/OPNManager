@@ -109,7 +109,9 @@ pub async fn get_system_disk(database: State<'_, Database>) -> Result<SystemDisk
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn get_system_temperature(database: State<'_, Database>) -> Result<SystemTemperature, String> {
+pub async fn get_system_temperature(
+    database: State<'_, Database>,
+) -> Result<SystemTemperature, String> {
     let api_info = database
         .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
@@ -130,32 +132,51 @@ pub async fn get_system_temperature(database: State<'_, Database>) -> Result<Sys
         Some(&api_info.api_secret),
     )
     .await?;
-    
+
     // Handle empty array response for systems without temperature sensors
-    let response_text = response.text().await
+    let response_text = response
+        .text()
+        .await
         .map_err(|e| format!("Failed to get response text: {}", e))?;
-    
+
     // Log the actual response for debugging
     log::info!("Temperature API response: {}", response_text);
-    
+
     if response_text.trim() == "[]" {
-        return Ok(SystemTemperature { sensors: Vec::new() });
+        return Ok(SystemTemperature {
+            sensors: Vec::new(),
+        });
     }
-    
+
     // The API response is an array of sensor objects, but we need to adapt it to our structure
     match serde_json::from_str::<serde_json::Value>(&response_text) {
         Ok(json_value) => {
             if let Some(array) = json_value.as_array() {
                 let mut sensors = Vec::new();
-                
+
                 for item in array {
                     // Extract fields from each sensor object
-                    let device = item.get("device").and_then(|v| v.as_str()).unwrap_or_default();
-                    let device_seq = item.get("device_seq").and_then(|v| v.as_str()).unwrap_or_default();
-                    let temperature = item.get("temperature").and_then(|v| v.as_str()).unwrap_or_default();
-                    let sensor_type = item.get("type").and_then(|v| v.as_str()).unwrap_or_default();
-                    let sensor_type_translated = item.get("type_translated").and_then(|v| v.as_str()).unwrap_or_default();
-                    
+                    let device = item
+                        .get("device")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default();
+                    let device_seq = item
+                        .get("device_seq")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default();
+                    let temperature = item
+                        .get("temperature")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default();
+                    let sensor_type = item
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default();
+                    let sensor_type_translated = item
+                        .get("type_translated")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default();
+
                     sensors.push(TemperatureSensor {
                         device: device.to_string(),
                         device_seq: device_seq.to_string(),
@@ -164,17 +185,21 @@ pub async fn get_system_temperature(database: State<'_, Database>) -> Result<Sys
                         type_translated: sensor_type_translated.to_string(),
                     });
                 }
-                
+
                 log::info!("Successfully parsed {} temperature sensors", sensors.len());
                 Ok(SystemTemperature { sensors })
             } else {
                 log::error!("Temperature API response is not an array");
-                Ok(SystemTemperature { sensors: Vec::new() })
+                Ok(SystemTemperature {
+                    sensors: Vec::new(),
+                })
             }
-        },
+        }
         Err(e) => {
             log::error!("Failed to parse temperature response: {}", e);
-            Ok(SystemTemperature { sensors: Vec::new() })
+            Ok(SystemTemperature {
+                sensors: Vec::new(),
+            })
         }
     }
 }

@@ -84,7 +84,7 @@ pub struct IpAddress {
 #[tauri::command]
 pub async fn get_interfaces(database: State<'_, Database>) -> Result<Vec<Interface>, String> {
     info!("Fetching interface information");
-    
+
     let api_info = database
         .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
@@ -102,7 +102,7 @@ pub async fn get_interfaces(database: State<'_, Database>) -> Result<Vec<Interfa
     // Fetch all pages
     while has_more_pages {
         info!("Fetching interface page {}", current_page);
-        
+
         let payload = serde_json::json!({
             "current": current_page,
             "rowCount": 10,
@@ -131,12 +131,13 @@ pub async fn get_interfaces(database: State<'_, Database>) -> Result<Vec<Interfa
             Ok(response_data) => {
                 // Add interfaces from this page
                 all_interfaces.extend(response_data.rows);
-                
+
                 // Check if there are more pages
-                let total_pages = (response_data.total as f64 / response_data.rowCount as f64).ceil() as usize;
+                let total_pages =
+                    (response_data.total as f64 / response_data.rowCount as f64).ceil() as usize;
                 has_more_pages = current_page < total_pages;
                 current_page += 1;
-            },
+            }
             Err(e) => {
                 error!("Failed to parse interface response: {}", e);
                 error!("Response: {}", response_text);
@@ -150,7 +151,7 @@ pub async fn get_interfaces(database: State<'_, Database>) -> Result<Vec<Interfa
         // First, sort by whether they have an identifier (assigned interfaces)
         let a_has_id = !a.identifier.is_empty();
         let b_has_id = !b.identifier.is_empty();
-        
+
         match (a_has_id, b_has_id) {
             (true, false) => std::cmp::Ordering::Less,
             (false, true) => std::cmp::Ordering::Greater,
@@ -166,12 +167,15 @@ pub async fn get_interfaces(database: State<'_, Database>) -> Result<Vec<Interfa
 }
 
 #[tauri::command]
-pub async fn get_interface_details(device: String, database: State<'_, Database>) -> Result<Interface, String> {
+pub async fn get_interface_details(
+    device: String,
+    database: State<'_, Database>,
+) -> Result<Interface, String> {
     info!("Getting details for interface: {}", device);
-    
+
     // Get all interfaces and filter for the requested one
     let interfaces = get_interfaces(database).await?;
-    
+
     interfaces
         .into_iter()
         .find(|iface| iface.device == device)

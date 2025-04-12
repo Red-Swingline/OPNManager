@@ -170,9 +170,9 @@ pub async fn add_route(
             e, response_text
         )
     })?;
-    
+
     apply_changes(database).await?;
-    
+
     Ok(result)
 }
 
@@ -237,7 +237,7 @@ pub async fn toggle_route(
         .map_err(|e| format!("Failed to parse response: {}", e))?;
 
     apply_changes(database).await?;
-    
+
     Ok(result)
 }
 

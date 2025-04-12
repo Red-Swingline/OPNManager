@@ -265,15 +265,18 @@ pub async fn get_firewall_logs(
             (cache.filter_criteria.action.is_empty()
                 || log
                     .action
-                    .as_ref().is_some_and(|a| a == &cache.filter_criteria.action))
+                    .as_ref()
+                    .is_some_and(|a| a == &cache.filter_criteria.action))
                 && (cache.filter_criteria.interface.is_empty()
                     || log
                         .interface
-                        .as_ref().is_some_and(|i| i == &cache.filter_criteria.interface))
+                        .as_ref()
+                        .is_some_and(|i| i == &cache.filter_criteria.interface))
                 && (cache.filter_criteria.direction.is_empty()
                     || log
                         .dir
-                        .as_ref().is_some_and(|d| d == &cache.filter_criteria.direction))
+                        .as_ref()
+                        .is_some_and(|d| d == &cache.filter_criteria.direction))
         })
         .cloned()
         .collect::<Vec<_>>();
@@ -366,25 +369,28 @@ pub fn start_log_polling(
                                 .collect();
                         }
 
-                        let filtered_logs = cache
-                            .logs
-                            .iter()
-                            .filter(|log| {
-                                (cache.filter_criteria.action.is_empty()
-                                    || log
-                                        .action
-                                        .as_ref().is_some_and(|a| a == &cache.filter_criteria.action))
-                                    && (cache.filter_criteria.interface.is_empty()
-                                        || log.interface.as_ref().is_some_and(|i| {
-                                            i == &cache.filter_criteria.interface
-                                        }))
-                                    && (cache.filter_criteria.direction.is_empty()
-                                        || log.dir.as_ref().is_some_and(|d| {
-                                            d == &cache.filter_criteria.direction
-                                        }))
-                            })
-                            .take(cache.filter_criteria.limit).cloned()
-                            .collect::<Vec<_>>();
+                        let filtered_logs =
+                            cache
+                                .logs
+                                .iter()
+                                .filter(|log| {
+                                    (cache.filter_criteria.action.is_empty()
+                                        || log
+                                            .action
+                                            .as_ref()
+                                            .is_some_and(|a| a == &cache.filter_criteria.action))
+                                        && (cache.filter_criteria.interface.is_empty()
+                                            || log.interface.as_ref().is_some_and(|i| {
+                                                i == &cache.filter_criteria.interface
+                                            }))
+                                        && (cache.filter_criteria.direction.is_empty()
+                                            || log.dir.as_ref().is_some_and(|d| {
+                                                d == &cache.filter_criteria.direction
+                                            }))
+                                })
+                                .take(cache.filter_criteria.limit)
+                                .cloned()
+                                .collect::<Vec<_>>();
 
                         let _ = window_clone.emit("firewall-logs-updated", filtered_logs);
                     }
