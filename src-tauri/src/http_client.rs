@@ -76,9 +76,9 @@ pub async fn make_http_request(
                 let status = response.status();
                 let body = response.text().await.unwrap_or_else(|_| "".to_string());
                 let error_message = match status.as_u16() {
-                    401 => format!("Authentication failed (HTTP 401): Your API key or secret is incorrect"),
-                    403 => format!("Permission denied (HTTP 403): Your API credentials don't have sufficient permissions"),
-                    404 => format!("API endpoint not found (HTTP 404): Check your firewall URL and port"),
+                    401 => "Authentication failed (HTTP 401): Your API key or secret is incorrect".to_string(),
+                    403 => "Permission denied (HTTP 403): Your API credentials don't have sufficient permissions".to_string(),
+                    404 => "API endpoint not found (HTTP 404): Check your firewall URL and port".to_string(),
                     _ => format!("Request to {} failed with status {}: {}", url, status, body)
                 };
 

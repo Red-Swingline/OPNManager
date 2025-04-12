@@ -1,6 +1,6 @@
 use crate::db::Database;
 use crate::http_client::make_http_request;
-use log::{error, info};
+use log::info;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::State;
