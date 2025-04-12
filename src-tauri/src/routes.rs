@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::http_client::make_http_request;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use tauri::State;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -55,6 +55,20 @@ pub struct ToggleResponse {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ReconfigureResponse {
     status: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RouteTableEntry {
+    proto: String,
+    destination: String,
+    gateway: String,
+    flags: String,
+    #[serde(rename = "nhop#")]
+    nhop: String,
+    mtu: String,
+    netif: String,
+    expire: String,
+    intf_description: String,
 }
 
 fn build_api_url(api_info: &crate::db::ApiInfo, endpoint: &str) -> String {
@@ -263,6 +277,32 @@ pub async fn apply_changes(database: State<'_, Database>) -> Result<ReconfigureR
 
     response
         .json::<ReconfigureResponse>()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_route_table(database: State<'_, Database>) -> Result<Vec<RouteTableEntry>, String> {
+    let api_info = database
+        .get_default_api_info()
+        .map_err(|e| format!("Failed to get API info: {}", e))?
+        .ok_or_else(|| "API info not found".to_string())?;
+
+    let url = build_api_url(&api_info, "/api/diagnostics/interface/getRoutes");
+
+    let response = make_http_request(
+        "GET",
+        &url,
+        None,
+        None,
+        Some(30),
+        Some(&api_info.api_key),
+        Some(&api_info.api_secret),
+    )
+    .await?;
+
+    response
+        .json::<Vec<RouteTableEntry>>()
         .await
         .map_err(|e| format!("Failed to parse response: {}", e))
 }

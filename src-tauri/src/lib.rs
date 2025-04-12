@@ -95,6 +95,7 @@ pub fn run() {
             routes::delete_route,
             routes::toggle_route,
             routes::apply_changes,
+            routes::get_route_table,
             power::reboot_firewall,
             snapshots::is_snapshots_supported,
             snapshots::get_snapshots,

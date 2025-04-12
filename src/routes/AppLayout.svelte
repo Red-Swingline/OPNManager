@@ -38,7 +38,8 @@
     network: false,
     firewall: false,
     system: false,
-    unbound: false
+    unbound: false,
+    routes: false
   };
 
   // Add scroll manager reference
@@ -48,7 +49,15 @@
     { path: "/", icon: mdiHome, label: "Dashboard" },
     { path: "/topology", icon: mdiGraphOutline, label: "Network Topology" },
     { path: "/interfaces", icon: mdiEthernet, label: "Interfaces" },
-    { path: "/routes", icon: mdiMapMarkerPath, label: "Routes" },
+    {
+      category: "routes",
+      icon: mdiMapMarkerPath,
+      label: "Routes",
+      items: [
+        { path: "/routes/static", icon: mdiMapMarkerPath, label: "Static Routes" },
+        { path: "/routes/status", icon: mdiServerNetwork, label: "Route Status" },
+      ],
+    },
     { path: "/devices", icon: mdiRouter, label: "Devices" },
     { path: "/rules", icon: mdiWallFire, label: "Firewall Rules" },
     { path: "/logs", icon: mdiTextBoxSearch, label: "Firewall Logs" },
