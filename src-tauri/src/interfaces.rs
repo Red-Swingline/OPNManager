@@ -334,7 +334,7 @@ pub async fn get_interfaces(database: State<'_, Database>) -> Result<Vec<Interfa
     ).await;
 
     // Handle timeout or errors
-    if let Err(_) = timeout {
+    if timeout.is_err() {
         error!("Interface fetch timed out after 45 seconds");
         if all_interfaces.is_empty() {
             // If no interfaces were retrieved, try our fallback approach
@@ -632,15 +632,15 @@ async fn try_alternative_interface_fetch(
                 "Desperate measure succeeded in getting {} interfaces",
                 interfaces.len()
             );
-            return Ok(interfaces);
+            Ok(interfaces)
         }
         Err(e) => {
             error!("All interface fetching methods failed");
-            return Err(format!(
+            Err(format!(
                 "All alternative methods failed. Errors: {}. Last error: {}",
                 endpoint_errors.join("; "),
                 e
-            ));
+            ))
         }
     }
 }
@@ -834,7 +834,7 @@ async fn try_extract_any_interfaces(
         api_info.api_url, api_info.port
     );
 
-    match make_http_request(
+    if let Ok(response) = make_http_request(
         "GET",
         &url,
         None,
@@ -843,22 +843,18 @@ async fn try_extract_any_interfaces(
         Some(&api_info.api_key),
         Some(&api_info.api_secret),
     )
-    .await
-    {
-        Ok(response) => {
-            if let Ok(text) = response.text().await {
-                // Try to extract any interface-looking data
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                    // Search for arrays that might contain interface data
-                    if let Some(interfaces) = extract_interfaces_from_json(&json) {
-                        if !interfaces.is_empty() {
-                            return Ok(interfaces);
-                        }
+    .await {
+        if let Ok(text) = response.text().await {
+            // Try to extract any interface-looking data
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                // Search for arrays that might contain interface data
+                if let Some(interfaces) = extract_interfaces_from_json(&json) {
+                    if !interfaces.is_empty() {
+                        return Ok(interfaces);
                     }
                 }
             }
         }
-        Err(_) => {}
     }
 
     // If all else fails, we could create a dummy interface, but let's just return an error
@@ -872,7 +868,7 @@ fn extract_interfaces_from_json(json: &serde_json::Value) -> Option<Vec<Interfac
     match json {
         serde_json::Value::Array(arr) => {
             // If this array looks like interfaces, convert it
-            if arr.len() > 0
+            if !arr.is_empty()
                 && arr.iter().any(|item| {
                     item.get("if").is_some()
                         || item.get("interface").is_some()
