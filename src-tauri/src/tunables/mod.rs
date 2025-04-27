@@ -3,6 +3,7 @@ use crate::http_client::make_http_request;
 use serde_json::{json, Value};
 use tauri::State;
 
+/// Search for tunables with pagination support
 #[tauri::command]
 pub async fn search_tunables(
     database: State<'_, Database>,
@@ -44,6 +45,7 @@ pub async fn search_tunables(
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
+/// Get a specific tunable by UUID
 #[tauri::command]
 pub async fn get_tunable(database: State<'_, Database>, uuid: String) -> Result<Value, String> {
     let api_info = database
@@ -73,6 +75,7 @@ pub async fn get_tunable(database: State<'_, Database>, uuid: String) -> Result<
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
+/// Update a tunable setting
 #[tauri::command]
 pub async fn set_tunable(
     database: State<'_, Database>,
@@ -116,6 +119,7 @@ pub async fn set_tunable(
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
+/// Apply tunable changes
 #[tauri::command]
 pub async fn apply_tunables(database: State<'_, Database>) -> Result<Value, String> {
     let api_info = database
@@ -145,7 +149,7 @@ pub async fn apply_tunables(database: State<'_, Database>) -> Result<Value, Stri
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
-
+/// Save and apply a tunable setting (convenience function)
 #[tauri::command]
 pub async fn save_and_apply_tunable(
     database: State<'_, Database>,
@@ -178,6 +182,7 @@ pub async fn save_and_apply_tunable(
     }))
 }
 
+/// Add a new tunable
 #[tauri::command]
 pub async fn add_tunable(
     database: State<'_, Database>,
@@ -220,7 +225,7 @@ pub async fn add_tunable(
         .map_err(|e| format!("Failed to parse response: {}", e))
 }
 
-
+/// Delete a tunable
 #[tauri::command]
 pub async fn delete_tunable(database: State<'_, Database>, uuid: String) -> Result<Value, String> {
     let api_info = database

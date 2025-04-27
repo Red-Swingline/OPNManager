@@ -1,15 +1,19 @@
 use crate::db::Database;
 use crate::http_client::make_http_request;
 use log::{error, info, warn};
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InterfaceResponse {
     #[serde(default)]
+    #[serde(default)]
     total: usize,
     #[serde(default)]
+    #[serde(default)]
     rowCount: usize,
+    #[serde(default)]
     #[serde(default)]
     current: usize,
     rows: Vec<Interface>,
@@ -91,6 +95,9 @@ pub async fn get_interfaces(database: State<'_, Database>) -> Result<Vec<Interfa
     // Track the start time for performance measurements
     let start_time = std::time::Instant::now();
 
+    // Track the start time for performance measurements
+    let start_time = std::time::Instant::now();
+
     let api_info = database
         .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
@@ -103,8 +110,14 @@ pub async fn get_interfaces(database: State<'_, Database>) -> Result<Vec<Interfa
 
     // Increase page size to get more interfaces in fewer requests
     let page_size = 50; // Increased from 25
+    // Increase page size to get more interfaces in fewer requests
+    let page_size = 50; // Increased from 25
     let mut all_interfaces = Vec::new();
     let mut current_page = 1;
+
+    // Implement retry logic with backoff
+    let max_retries = 3;
+    let initial_timeout = 15; // 15 seconds initial timeout per request
 
     // Implement retry logic with backoff
     let max_retries = 3;
@@ -122,7 +135,42 @@ pub async fn get_interfaces(database: State<'_, Database>) -> Result<Vec<Interfa
                     "sort": {},
                     "searchPhrase": ""
                 });
+    // Set a timeout for the entire operation
+    let timeout = tokio::time::timeout(
+        std::time::Duration::from_secs(45), // 45 second global timeout (increased from 30)
+        async {
+            loop {
+                info!("Fetching interface page {}", current_page);
+                let payload = serde_json::json!({
+                    "current": current_page,
+                    "rowCount": page_size,
+                    "sort": {},
+                    "searchPhrase": ""
+                });
 
+                // Try with retries and backoff
+                let mut retry_count = 0;
+                let mut last_error = String::new();
+                let mut current_timeout = initial_timeout;
+
+                while retry_count < max_retries {
+                    match make_http_request(
+                        "POST",
+                        &url,
+                        Some(payload.clone()),
+                        None,
+                        Some(current_timeout),
+                        Some(&api_info.api_key),
+                        Some(&api_info.api_secret),
+                    ).await {
+                        Ok(response) => {
+                            match response.text().await {
+                                Ok(response_text) => {
+                                    // Parse response
+                                    match serde_json::from_str::<InterfaceResponse>(&response_text) {
+                                        Ok(response_data) => {
+                                            // Add interfaces from this page
+                                            all_interfaces.extend(response_data.rows.clone());
                 // Try with retries and backoff
                 let mut retry_count = 0;
                 let mut last_error = String::new();
@@ -286,7 +334,7 @@ pub async fn get_interfaces(database: State<'_, Database>) -> Result<Vec<Interfa
     ).await;
 
     // Handle timeout or errors
-    if timeout.is_err() {
+    if let Err(_) = timeout {
         error!("Interface fetch timed out after 45 seconds");
         if all_interfaces.is_empty() {
             // If no interfaces were retrieved, try our fallback approach
@@ -453,6 +501,27 @@ pub async fn get_interfaces(database: State<'_, Database>) -> Result<Vec<Interfa
         }
 
         // Then sort by whether they have an identifier (assigned interfaces)
+        // First, sort by status (up > down)
+        let a_is_up = a.status.to_lowercase() == "up";
+        let b_is_up = b.status.to_lowercase() == "up";
+
+        match (a_is_up, b_is_up) {
+            (true, false) => return std::cmp::Ordering::Less,
+            (false, true) => return std::cmp::Ordering::Greater,
+            _ => {}
+        }
+
+        // Special handling for CARP - prioritize physical interfaces over CARP in HA setups
+        let a_is_carp = a.device.contains("_vip") || a.device.starts_with("carp");
+        let b_is_carp = b.device.contains("_vip") || b.device.starts_with("carp");
+
+        match (a_is_carp, b_is_carp) {
+            (false, true) => return std::cmp::Ordering::Less, // Physical interfaces before CARP
+            (true, false) => return std::cmp::Ordering::Greater,
+            _ => {} // Both physical or both CARP, continue with regular sorting
+        }
+
+        // Then sort by whether they have an identifier (assigned interfaces)
         let a_has_id = !a.identifier.is_empty();
         let b_has_id = !b.identifier.is_empty();
 
@@ -465,6 +534,30 @@ pub async fn get_interfaces(database: State<'_, Database>) -> Result<Vec<Interfa
             }
         }
     });
+
+    // Calculate load duration
+    let duration = start_time.elapsed();
+    let duration_ms = duration.as_millis() as u64;
+
+    info!(
+        "Retrieved {} interfaces in {}ms",
+        all_interfaces.len(),
+        duration_ms
+    );
+
+    // Log performance metrics to console instead of diagnostics system
+    let performance_data = format!(
+        "Interface loading stats: {} interfaces loaded in {}ms",
+        all_interfaces.len(),
+        duration_ms
+    );
+
+    if duration_ms > 5000 {
+        // Log as a potential performance issue if taking over 5 seconds
+        warn!("PERFORMANCE ISSUE: {}", performance_data);
+    } else {
+        info!("{}", performance_data);
+    }
 
     // Calculate load duration
     let duration = start_time.elapsed();
@@ -539,15 +632,15 @@ async fn try_alternative_interface_fetch(
                 "Desperate measure succeeded in getting {} interfaces",
                 interfaces.len()
             );
-            Ok(interfaces)
+            return Ok(interfaces);
         }
         Err(e) => {
             error!("All interface fetching methods failed");
-            Err(format!(
+            return Err(format!(
                 "All alternative methods failed. Errors: {}. Last error: {}",
                 endpoint_errors.join("; "),
                 e
-            ))
+            ));
         }
     }
 }
@@ -741,7 +834,7 @@ async fn try_extract_any_interfaces(
         api_info.api_url, api_info.port
     );
 
-    if let Ok(response) = make_http_request(
+    match make_http_request(
         "GET",
         &url,
         None,
@@ -750,19 +843,26 @@ async fn try_extract_any_interfaces(
         Some(&api_info.api_key),
         Some(&api_info.api_secret),
     )
-    .await {
-        if let Ok(text) = response.text().await {
-            // Try to extract any interface-looking data
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                // Search for arrays that might contain interface data
-                if let Some(interfaces) = extract_interfaces_from_json(&json) {
-                    if !interfaces.is_empty() {
-                        return Ok(interfaces);
+    .await
+    {
+        Ok(response) => {
+            if let Ok(text) = response.text().await {
+                // Try to extract any interface-looking data
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                    // Search for arrays that might contain interface data
+                    if let Some(interfaces) = extract_interfaces_from_json(&json) {
+                        if !interfaces.is_empty() {
+                            return Ok(interfaces);
+                        }
                     }
                 }
             }
         }
+        Err(_) => {}
     }
+
+    // If all else fails, we could create a dummy interface, but let's just return an error
+    // for better transparency to the user
 
     Err("Unable to retrieve any interface data from the firewall. The API may not be compatible or accessible.".to_string())
 }
@@ -772,7 +872,7 @@ fn extract_interfaces_from_json(json: &serde_json::Value) -> Option<Vec<Interfac
     match json {
         serde_json::Value::Array(arr) => {
             // If this array looks like interfaces, convert it
-            if !arr.is_empty()
+            if arr.len() > 0
                 && arr.iter().any(|item| {
                     item.get("if").is_some()
                         || item.get("interface").is_some()
