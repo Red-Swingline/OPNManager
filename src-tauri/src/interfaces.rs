@@ -764,9 +764,6 @@ async fn try_extract_any_interfaces(
         }
     }
 
-    // If all else fails, we could create a dummy interface, but let's just return an error
-    // for better transparency to the user
-
     Err("Unable to retrieve any interface data from the firewall. The API may not be compatible or accessible.".to_string())
 }
 
