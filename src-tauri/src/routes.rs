@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::http_client::make_http_request;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use tauri::State;
 
 #[derive(Serialize, Deserialize, Debug)]

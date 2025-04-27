@@ -155,6 +155,7 @@ pub async fn get_unbound_settings(database: State<'_, Database>) -> Result<Value
     Ok(parsed)
 }
 
+#[warn(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn set_dnsbl_settings(
     database: State<'_, Database>,
