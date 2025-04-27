@@ -118,27 +118,48 @@ pub fn update_api_info(
     is_default: bool,
     database: State<Database>,
 ) -> Result<(), String> {
-    let mut api_info = database
+    let result = database
         .get_api_info(Some(&profile_name))
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("API profile '{}' not found", profile_name))?;
+        .map_err(|e| e.to_string())?;
 
+    if result.is_none() {
+        return Err(format!("API profile '{}' not found", profile_name));
+    }
+
+    // Get the existing profile info
+    let mut api_info = result.unwrap();
+
+    // Check if credentials are empty (which happens when PIN cache is expired)
+    if api_info.api_key.is_empty() && api_info.api_secret.is_empty() {
+        return Err(
+            "PIN authentication required. Please login again before editing profiles.".to_string(),
+        );
+    }
+
+    // Update the profile info
     api_info.api_key = api_key;
     api_info.api_secret = api_secret;
     api_info.api_url = api_url;
     api_info.port = port;
     api_info.is_default = is_default;
 
-    database
-        .save_api_info(&api_info)
-        .map_err(|e| e.to_string())?;
+    // Save the updated profile
+    database.save_api_info(&api_info).map_err(|e| {
+        if e.to_string().contains("PIN authentication required") {
+            "PIN authentication required. Please login again before editing profiles.".to_string()
+        } else {
+            format!("Failed to save API info: {}", e)
+        }
+    })?;
 
+    // Update default status if needed
     if is_default {
         database
             .set_default_profile(&profile_name)
             .map_err(|e| format!("Failed to set default profile: {}", e))?;
     }
 
+    info!("API profile '{}' updated successfully", profile_name);
     Ok(())
 }
 

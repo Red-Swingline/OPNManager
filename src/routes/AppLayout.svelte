@@ -19,6 +19,7 @@
     mdiEthernet,
     mdiGraphOutline,
     mdiServerNetwork,
+    mdiTuneVertical,
   } from "@mdi/js";
   import { goto } from "$app/navigation";
   import { authStore } from "$lib/stores/authStore";
@@ -71,6 +72,8 @@
       ],
     },
     { path: "/snapshots", icon: mdiImageMultiple, label: "ZFS Snapshots" },
+    { path: "/wol", icon: mdiPowerStandby, label: "Wake-on-LAN" },
+    { path: "/tunables", icon: mdiTuneVertical, label: "System Tunables" },
     { path: "/updates", icon: mdiUpdate, label: "Updates" },
   ];
   
@@ -241,40 +244,44 @@
             </li>
           {/if}
         {/each}
-        <li class="mt-auto">
-          <button
-            on:click={() => handleNavigation('/settings')}
-            class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
-            class:bg-base-300={$page.url.pathname === '/settings'}
-          >
-            <svg class="w-6 h-6" viewBox="0 0 24 24">
-              <path fill="currentColor" d={mdiCog} />
-            </svg>
-            <span>Settings</span>
-          </button>
-        </li>
-        <li>
-          <button
-            on:click={openRebootDialog}
-            class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200 text-error"
-          >
-            <svg class="w-6 h-6" viewBox="0 0 24 24">
-              <path fill="currentColor" d={mdiPowerStandby} />
-            </svg>
-            <span>Reboot Firewall</span>
-          </button>
-        </li>
-        <li>
-          <button
-            on:click={handleLogout}
-            class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
-          >
-            <svg class="w-6 h-6" viewBox="0 0 24 24">
-              <path fill="currentColor" d={mdiLogout} />
-            </svg>
-            <span>Logout</span>
-          </button>
-        </li>
+        
+        <!-- Admin section at the bottom -->
+        <div class="pt-4 mt-4 border-t border-base-300">
+          <li>
+            <button
+              on:click={openRebootDialog}
+              class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200 text-error"
+            >
+              <svg class="w-6 h-6" viewBox="0 0 24 24">
+                <path fill="currentColor" d={mdiPowerStandby} />
+              </svg>
+              <span>Reboot Firewall</span>
+            </button>
+          </li>
+          <li>
+            <button
+              on:click={() => handleNavigation('/settings')}
+              class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
+              class:bg-base-300={$page.url.pathname === '/settings'}
+            >
+              <svg class="w-6 h-6" viewBox="0 0 24 24">
+                <path fill="currentColor" d={mdiCog} />
+              </svg>
+              <span>Settings</span>
+            </button>
+          </li>
+          <li>
+            <button
+              on:click={handleLogout}
+              class="flex items-center w-full p-2 space-x-3 rounded-md hover:bg-base-200 transition-colors duration-200"
+            >
+              <svg class="w-6 h-6" viewBox="0 0 24 24">
+                <path fill="currentColor" d={mdiLogout} />
+              </svg>
+              <span>Logout</span>
+            </button>
+          </li>
+        </div>
       </ul>
     </nav>
   </aside>

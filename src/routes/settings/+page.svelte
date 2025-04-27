@@ -19,6 +19,7 @@
   let activeTab: 'api' | 'pin' = 'api';
   let isFirstRun = false;
   let isUpdatingPin = false;
+  
 
   onMount(async () => {
     if ($authStore.isLoggedIn) {
@@ -169,6 +170,7 @@
   function handleFormSuccess(event: CustomEvent<{ message: string }>) {
     toasts.success(event.detail.message);
   }
+  
 </script>
 
 {#if $authStore.isLoggedIn || isFirstRun}
@@ -291,3 +293,4 @@
 {:else}
   <Login />
 {/if}
+

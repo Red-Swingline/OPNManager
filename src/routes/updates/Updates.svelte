@@ -50,6 +50,7 @@
       const result = await invoke<any>('check_for_updates');
       console.log('Check for updates result:', result);
 
+      // First check for major upgrades (high priority)
       if (result.has_major_upgrade && result.major_upgrade_version) {
         hasMajorUpgrade = true;
         majorUpgradeVersion = result.major_upgrade_version;
@@ -58,8 +59,54 @@
         showChangelogButton = true;
         showUpgradeButton = true;
         toasts.success(`Major update to version ${majorUpgradeVersion} is available.`);
-      } else if (result.status === "update") {
-
+      } 
+      // Then check for minor upgrades
+      else if (result.has_minor_upgrade && result.minor_upgrade_to) {
+        console.log("Minor upgrade detected:", result.minor_upgrade_from, "→", result.minor_upgrade_to);
+        showChangelogButton = true;
+        showUpgradeButton = true;
+        // Use the target_version or minor_upgrade_to for changelog
+        changelogVersion = result.target_version || result.minor_upgrade_to;
+        
+        // Parse versions to compare major.minor.patch vs build
+        const currentVersion = result.minor_upgrade_from || '';
+        const newVersion = result.minor_upgrade_to || '';
+        
+        // Split into semantic parts (X.Y.Z) and build part (_N)
+        const [currentBase, currentBuild = ''] = currentVersion.split('_');
+        const [newBase, newBuild = ''] = newVersion.split('_');
+        
+        // Split base into semantic components
+        const currentParts = currentBase.split('.').map(Number);
+        const newParts = newBase.split('.').map(Number);
+        
+        console.log(`Comparing versions: ${currentVersion} → ${newVersion}`);
+        console.log(`Semantic parts: ${currentParts} → ${newParts}`);
+        
+        // Check if this is a semantic version change (X.Y.Z) or just a build change (_N)
+        if (currentBase === newBase) {
+          // Same base version, just a build update
+          toasts.success(`Update to build ${newVersion} is available.`);
+        } 
+        // Major version change (X)
+        else if (newParts[0] !== currentParts[0]) {
+          toasts.success(`Major update to version ${newBase} is available.`);
+        }
+        // Minor version change (Y)
+        else if (newParts[1] !== currentParts[1]) {
+          toasts.success(`Minor update to version ${newBase} is available.`);
+        }
+        // Patch version change (Z)
+        else if (newParts[2] !== currentParts[2]) {
+          toasts.success(`Patch update to version ${newBase} is available.`);
+        }
+        // Fallback for any other case
+        else {
+          toasts.success(`Update to version ${newVersion} is available.`);
+        }
+      }
+      // Check generic update status
+      else if (result.status === "update" || result.updates_available === true) {
         const currentVersion = result.product_version || 
                               (result.product?.product_version) || 
                               "unknown";
@@ -241,8 +288,14 @@
             </tr>
             {#if hasMajorUpgrade && majorUpgradeVersion}
               <tr class="bg-warning bg-opacity-20">
-                <td class="font-semibold whitespace-nowrap">Available Upgrade</td>
+                <td class="font-semibold whitespace-nowrap">Available Major Upgrade</td>
                 <td class="break-all font-bold">{majorUpgradeVersion}</td>
+              </tr>
+            {/if}
+            {#if firmwareStatus?.has_minor_upgrade && firmwareStatus?.minor_upgrade_to}
+              <tr class="bg-info bg-opacity-20">
+                <td class="font-semibold whitespace-nowrap">Available Minor Upgrade</td>
+                <td class="break-all font-bold">{firmwareStatus.minor_upgrade_to}</td>
               </tr>
             {/if}
           </tbody>

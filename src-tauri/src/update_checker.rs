@@ -37,6 +37,7 @@ pub async fn check_for_updates(database: State<'_, Database>) -> Result<Value, S
         return Err(format!("Check failed: {:?}", check_body));
     }
 
+    // Poll for check status
     let status_url = build_api_url(&api_info, "/api/core/firmware/upgradestatus");
     loop {
         let status_response = make_http_request(
@@ -98,14 +99,37 @@ pub async fn check_for_updates(database: State<'_, Database>) -> Result<Value, S
 
     let mut result = firmware_status.clone();
 
+    // Add latest version info
     result["latest_version"] = firmware_info["product"]["product_latest"].clone();
 
+    // Check for major upgrades (existing logic)
     if firmware_status["upgrade_major_version"].is_string() {
         result["has_major_upgrade"] = serde_json::json!(true);
         result["major_upgrade_version"] = firmware_status["upgrade_major_version"].clone();
         result["major_upgrade_message"] = firmware_status["upgrade_major_message"].clone();
     } else {
         result["has_major_upgrade"] = serde_json::json!(false);
+    }
+
+    // NEW: Check for minor upgrades in the upgrade_packages array
+    if let Some(upgrade_packages) = firmware_status["upgrade_packages"].as_array() {
+        if !upgrade_packages.is_empty() {
+            // Find the main opnsense package upgrade
+            for package in upgrade_packages {
+                if package["name"] == "opnsense" {
+                    result["has_minor_upgrade"] = serde_json::json!(true);
+                    result["minor_upgrade_from"] = package["current_version"].clone();
+                    result["minor_upgrade_to"] = package["new_version"].clone();
+
+                    // Let's compute a semantic version string for frontend display
+                    let new_version = package["new_version"].as_str().unwrap_or("");
+                    if !new_version.is_empty() {
+                        result["target_version"] = serde_json::json!(new_version);
+                    }
+                    break;
+                }
+            }
+        }
     }
 
     Ok(result)
@@ -256,12 +280,47 @@ pub async fn get_current_firmware_status(database: State<'_, Database>) -> Resul
     let has_major_upgrade = firmware_status["upgrade_major_version"].is_string();
 
     let mut result = firmware_status.clone();
+
+    // Handle major upgrades
     if has_major_upgrade {
         result["has_major_upgrade"] = serde_json::json!(true);
         result["major_upgrade_version"] = firmware_status["upgrade_major_version"].clone();
         result["major_upgrade_message"] = firmware_status["upgrade_major_message"].clone();
     } else {
         result["has_major_upgrade"] = serde_json::json!(false);
+    }
+
+    // Handle minor upgrades
+    if let Some(upgrade_packages) = firmware_status["upgrade_packages"].as_array() {
+        if !upgrade_packages.is_empty() {
+            // Find the main opnsense package upgrade
+            for package in upgrade_packages {
+                if package["name"] == "opnsense" {
+                    result["has_minor_upgrade"] = serde_json::json!(true);
+                    result["minor_upgrade_from"] = package["current_version"].clone();
+                    result["minor_upgrade_to"] = package["new_version"].clone();
+
+                    // Set target version for frontend display
+                    let new_version = package["new_version"].as_str().unwrap_or("");
+                    if !new_version.is_empty() {
+                        result["target_version"] = serde_json::json!(new_version);
+                    }
+                    break;
+                }
+            }
+        }
+    } else {
+        result["has_minor_upgrade"] = serde_json::json!(false);
+    }
+
+    // Set status from the status field if available
+    if firmware_status["status"].is_string() {
+        let status = firmware_status["status"].as_str().unwrap_or("");
+        if status == "update" {
+            result["updates_available"] = serde_json::json!(true);
+        } else {
+            result["updates_available"] = serde_json::json!(false);
+        }
     }
 
     Ok(result)

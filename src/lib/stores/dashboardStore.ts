@@ -16,6 +16,7 @@ const DEFAULT_WIDGETS: DashboardWidgetPref[] = [
   { widget_key: 'traffic_graph', visible: true, position: 5 },
   { widget_key: 'gateways', visible: true, position: 6 },
   { widget_key: 'interfaces', visible: true, position: 7 },
+  { widget_key: 'wol', visible: true, position: 8 },
 ];
 
 function createDashboardStore() {

@@ -1,6 +1,3 @@
-/**
- * Manages iOS-specific scrolling behaviors to fix common issues
- */
 export function setupIOSScrolling() {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window).MSStream;
     

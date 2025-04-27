@@ -1,11 +1,19 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import "../app.css";
   import Toast from '$lib/components/Toast.svelte';
   import { preventIOSInputScroll } from "$lib/utils/iosFocusFix";
+  import { authStore } from "$lib/stores/authStore";
+  import { registerLogoutCleanup } from "$lib/utils/dashboardCleanup";
+
+  // Holds the unsubscribe function from the auth store
+  let authUnsubscribe;
 
   onMount(() => {
     const cleanup = preventIOSInputScroll();
+
+    // Register the logout cleanup function to clean up dashboard resources on logout
+    authUnsubscribe = registerLogoutCleanup(authStore);
 
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window).MSStream;
     
@@ -28,6 +36,13 @@
     return () => {
       if (cleanup) cleanup();
     };
+  });
+  
+  onDestroy(() => {
+    // Unsubscribe from the auth store when the layout is destroyed
+    if (authUnsubscribe) {
+      authUnsubscribe();
+    }
   });
 </script>
 

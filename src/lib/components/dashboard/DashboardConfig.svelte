@@ -20,7 +20,9 @@
       services: "Services",
       traffic_graph: "Traffic Graph",
       gateways: "Gateways",
-      interfaces: "Interface Traffic"
+      interfaces: "Interface Traffic",
+      wol: "Wake-on-LAN",
+      tunables: "System Tunables"
     };
   
     // Enable drag and drop reordering

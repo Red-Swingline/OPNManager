@@ -13,8 +13,10 @@ mod routes;
 mod snapshots;
 mod system_resources;
 mod traffic;
+mod tunables;
 mod unbound;
 mod update_checker;
+mod wol;
 
 use db::Database;
 use firewall_logs::register_log_cache;
@@ -125,6 +127,23 @@ pub fn run() {
             unbound::apply_cron_changes,
             interfaces::get_interfaces,
             interfaces::get_interface_details,
+            wol::check_wol_plugin_installed,
+            wol::get_wol_interfaces,
+            wol::search_wol_hosts,
+            wol::get_arp_devices,
+            wol::wake_device,
+            wol::wake_mac_address,
+            wol::add_wol_host,
+            wol::delete_wol_host,
+            wol::install_wol_plugin,
+            wol::check_install_status,
+            tunables::search_tunables,
+            tunables::get_tunable,
+            tunables::set_tunable,
+            tunables::apply_tunables,
+            tunables::save_and_apply_tunable,
+            tunables::add_tunable,
+            tunables::delete_tunable,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

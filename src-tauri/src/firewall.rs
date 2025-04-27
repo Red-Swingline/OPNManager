@@ -36,7 +36,12 @@ pub struct ApplyResponse {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AddRuleResponse {
     result: String,
-    uuid: String,
+    uuid: Option<String>,
+    // Include additional fields that may be in the response
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    validations: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -199,10 +204,46 @@ pub async fn add_firewall_rule(
     )
     .await?;
 
-    let add_result = response
-        .json::<AddRuleResponse>()
+    // First try to parse as AddRuleResponse
+    let response_text = response
+        .text()
         .await
-        .map_err(|e| format!("Failed to parse add rule response: {}", e))?;
+        .map_err(|e| format!("Failed to read response body: {}", e))?;
+
+    // Log the raw response for debugging
+    println!("Raw add rule response: {}", response_text);
+
+    // Try to parse as AddRuleResponse
+    let add_result = match serde_json::from_str::<AddRuleResponse>(&response_text) {
+        Ok(result) => result,
+        Err(e) => {
+            // If parsing fails, try to parse as a generic JSON value
+            match serde_json::from_str::<serde_json::Value>(&response_text) {
+                Ok(value) => {
+                    // Try to extract result field
+                    let result = value
+                        .get("result")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("error")
+                        .to_string();
+
+                    // Create a default response
+                    AddRuleResponse {
+                        result,
+                        uuid: None,
+                        status: None,
+                        validations: Some(value),
+                    }
+                }
+                Err(_) => {
+                    // If all parsing fails, return a meaningful error
+                    return Err(format!("Failed to parse API response: {}", response_text));
+                }
+            }
+        }
+    };
+
+    // Apply changes only if the result was successful
     if add_result.result == "saved" {
         apply_firewall_changes(database).await?;
     }

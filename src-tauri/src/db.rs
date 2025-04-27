@@ -581,7 +581,7 @@ impl Database {
             let pin = self.get_cached_pin().map_err(|e| {
                 error!("Failed to get cached PIN: {}", e);
                 rusqlite::Error::InvalidParameterName(
-                    "Failed to get PIN for encryption".to_string(),
+                    "PIN authentication required. Please login again.".to_string(),
                 )
             })?;
 
@@ -600,21 +600,56 @@ impl Database {
                     )
                 })?;
 
-            conn.execute(
-                "INSERT OR REPLACE INTO api_info (profile_name, encrypted_api_key, api_key_nonce, 
-                 encrypted_api_secret, api_secret_nonce, api_url, port, is_default) 
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![
-                    api_info.profile_name,
-                    encrypted_api_key,
-                    api_key_nonce,
-                    encrypted_api_secret,
-                    api_secret_nonce,
-                    api_info.api_url,
-                    api_info.port,
-                    api_info.is_default
-                ],
-            )?;
+            // Check if this profile already exists to preserve its ID
+            let existing_id: Option<i64> = conn
+                .query_row(
+                    "SELECT id FROM api_info WHERE profile_name = ?1",
+                    params![api_info.profile_name],
+                    |row| row.get(0),
+                )
+                .optional()?;
+
+            if let Some(id) = existing_id {
+                // Update the existing profile, preserving its ID
+                conn.execute(
+                    "UPDATE api_info SET 
+                        encrypted_api_key = ?1, 
+                        api_key_nonce = ?2, 
+                        encrypted_api_secret = ?3, 
+                        api_secret_nonce = ?4, 
+                        api_url = ?5, 
+                        port = ?6, 
+                        is_default = ?7
+                    WHERE id = ?8",
+                    params![
+                        encrypted_api_key,
+                        api_key_nonce,
+                        encrypted_api_secret,
+                        api_secret_nonce,
+                        api_info.api_url,
+                        api_info.port,
+                        api_info.is_default,
+                        id
+                    ],
+                )?;
+            } else {
+                // Insert a new profile
+                conn.execute(
+                    "INSERT INTO api_info (profile_name, encrypted_api_key, api_key_nonce, 
+                    encrypted_api_secret, api_secret_nonce, api_url, port, is_default) 
+                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    params![
+                        api_info.profile_name,
+                        encrypted_api_key,
+                        api_key_nonce,
+                        encrypted_api_secret,
+                        api_secret_nonce,
+                        api_info.api_url,
+                        api_info.port,
+                        api_info.is_default
+                    ],
+                )?;
+            }
         } else {
             info!("Recreating table with unencrypted schema");
             conn.execute("DROP TABLE IF EXISTS api_info", [])?;
@@ -900,12 +935,26 @@ impl Database {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
 
+        // Get the profile ID first to properly handle dashboard preferences
+        let profile_id: i64 = tx.query_row(
+            "SELECT id FROM api_info WHERE profile_name = ?1",
+            params![profile_name],
+            |row| row.get(0),
+        )?;
+
         let is_default: bool = tx.query_row(
             "SELECT is_default FROM api_info WHERE profile_name = ?1",
             params![profile_name],
             |row| row.get(0),
         )?;
 
+        // First delete any dashboard preferences associated with this profile
+        tx.execute(
+            "DELETE FROM dashboard_preferences WHERE profile_id = ?1",
+            params![profile_id],
+        )?;
+
+        // Now delete the profile itself
         tx.execute(
             "DELETE FROM api_info WHERE profile_name = ?1",
             params![profile_name],

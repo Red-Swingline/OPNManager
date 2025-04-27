@@ -30,6 +30,8 @@
   // Import custom node components
   import InterfaceNode from './InterfaceNode.svelte';
   import DeviceNode from './DeviceNode.svelte';
+  import LightweightDeviceNode from './LightweightDeviceNode.svelte';
+  import LightweightInterfaceNode from './LightweightInterfaceNode.svelte';
 
   export let interfaces: Interface[] = [];
   export let devices: CombinedDevice[] = [];
@@ -49,13 +51,32 @@
   function handleElementSelectDirect(element: Interface | CombinedDevice, type: 'interface' | 'device') {
     console.log('Direct element select in TopologyMap:', type, element);
     
-    // Call the prop function if provided
-    if (onElementSelect) {
-      onElementSelect(element, type);
+    // Enhanced logging to debug
+    if (!element) {
+      console.error('handleElementSelectDirect called with null element');
+      return;
     }
     
-    // Also dispatch the event for backward compatibility
-    dispatch('elementSelect', { element, type });
+    // First try the direct callback
+    try {
+      if (onElementSelect) {
+        console.log('Calling onElementSelect prop with:', type, element);
+        onElementSelect(element, type);
+      }
+    } catch (error) {
+      console.error('Error in onElementSelect callback:', error);
+    }
+    
+    // Then try dispatching event
+    try {
+      console.log('Dispatching elementSelect event with:', { element, type });
+      dispatch('elementSelect', { element, type });
+    } catch (error) {
+      console.error('Error dispatching elementSelect event:', error);
+    }
+    
+    // Last resort - try updating parent directly
+    console.log('Details provided to parent component through multiple channels');
   }
   
   // Just log when interfaces change
@@ -84,34 +105,72 @@
   const nodes = writable<Node[]>([]);
   const edges = writable<Edge[]>([]);
   
-  // Define node types - only using the predefined components for now
+  // Initialize nodes and edges with empty arrays to prevent undefined errors
+  nodes.set([]);
+  edges.set([]);
+  
+  // Detect if we're on a mobile device (iOS/Android) for minor optimizations
+  const isMobileDevice = typeof window !== 'undefined' && 
+    (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || 
+    (navigator.maxTouchPoints && navigator.maxTouchPoints > 2));
+  
+  // Use lightweight components for better performance on all devices
   const nodeTypes = {
-    interface: InterfaceNode,
-    device: DeviceNode
+    interface: LightweightInterfaceNode,
+    device: LightweightDeviceNode
   };
 
-  // Prepare data for visualization
+  // Prepare data for visualization with incremental rendering for better performance
   function prepareFlowData() {
+    // Start with just the interfaces for immediate feedback
     const flowNodes: Node[] = [];
     const flowEdges: Edge[] = [];
     
-    // Debug log of interfaces and devices
     console.log('Preparing flow data with:', interfaces.length, 'interfaces,', devices.length, 'devices');
     
-    // Filter interfaces
-    const filteredInterfaces = interfaces.filter(iface => 
-      iface.identifier || iface.is_physical
-    );
+    // Filter interfaces, handling CARP/HA setups better
+    const filteredInterfaces = interfaces.filter(iface => {
+      // Skip certain system interfaces that aren't useful in the visualization
+      if (iface.device === 'lo0' || iface.device === 'pfsync0') {
+        return false;
+      }
+      
+      // Special handling for CARP interfaces in HA setups
+      const isCarpInterface = 
+        iface.device.includes('_vip') || 
+        iface.device.startsWith('carp') ||
+        (iface.description && iface.description.toLowerCase().includes('carp'));
+      
+      // Include CARP interfaces only if they're UP (they're the active interfaces in the HA pair)
+      if (isCarpInterface) {
+        return iface.status?.toLowerCase() === 'up';
+      }
+      
+      // For normal interfaces: include physical, virtual, and interfaces with identifiers
+      // Only filter out special system interfaces like lo0 and pfsync0 that we explicitly exclude above
+      return true;
+    });
     
-    // Calculate layout parameters
-    const verticalSpacing = 200;
-    const startY = 100;
-    const interfaceX = 180; 
-    const deviceRowWidth = 180; 
+    // Calculate layout parameters with more spacing to prevent overlap
+    const verticalSpacing = 200;  // Base vertical space between interfaces
+    const startY = 80;
+    const interfaceX = 120; 
+    const deviceRowWidth = 130;  // Consistent horizontal space across all platforms
     
     // Calculate extra spacing between different interface groups
     // This will create a visual gap between devices from different interfaces
-    const interfaceGroupGap = 60; // Increased extra space between interface groups
+    const interfaceGroupGap = 150; // Significantly increased spacing between interface clusters
+    
+    // Additional debug logging for layout adjustments
+    console.log('Using enhanced interface spacing of', interfaceGroupGap, 'px between interface clusters');
+    
+    // Dynamic device limit based on total device count to improve visualization
+    const totalDeviceCount = devices.length;
+    // Reasonable limits for display based on device type
+    // Use consistent device limits across all platforms for uniformity
+    let deviceLimit = totalDeviceCount > 200 ? 12 :
+                      totalDeviceCount > 100 ? 18 : 
+                      totalDeviceCount > 50 ? 25 : 35;
     
     // Add interface nodes in a vertical column with extra spacing between groups
     filteredInterfaces.forEach((iface, index) => {
@@ -119,8 +178,11 @@
       const extraSpace = index > 0 ? interfaceGroupGap : 0;
       const y = startY + (index * verticalSpacing) + (index * extraSpace);
       
+      // Ensure unique ID for interface
+      const interfaceId = `interface-${iface.device}`;
+      
       flowNodes.push({
-        id: `interface-${iface.device}`,
+        id: interfaceId,
         type: 'interface',
         position: { x: interfaceX, y },
         data: {
@@ -133,21 +195,38 @@
     // For each interface, track connected devices to organize them
     const interfaceDeviceMap = new Map();
     
-    // Group devices by interface
+    // Group devices by interface, with special handling for CARP interfaces
     devices.forEach((device) => {
-      if (!interfaceDeviceMap.has(device.intf)) {
-        interfaceDeviceMap.set(device.intf, []);
+      if (device && device.intf) {
+        // Create normalized interface name to handle CARP interfaces in HA setups
+        // This will map devices on CARP interfaces to their corresponding regular interface
+        let normalizedIntf = device.intf;
+        
+        // Special handling for devices on CARP interfaces
+        if (device.intf.includes('_vip') || device.intf.startsWith('carp')) {
+          // Try to find the corresponding physical interface
+          const baseIntf = device.intf.replace('_vip', '').replace(/^carp\d+_/, '');
+          
+          // If we can find a matching physical interface, use that instead
+          const matchingInterface = filteredInterfaces.find(iface => iface.device === baseIntf);
+          if (matchingInterface) {
+            // Map this device to the physical interface instead of the CARP interface
+            normalizedIntf = matchingInterface.device;
+            console.log(`Mapped device on CARP interface ${device.intf} to physical interface ${normalizedIntf}`);
+          }
+        }
+        
+        // Now use the normalized interface name
+        if (!interfaceDeviceMap.has(normalizedIntf)) {
+          interfaceDeviceMap.set(normalizedIntf, []);
+        }
+        interfaceDeviceMap.get(normalizedIntf).push(device);
       }
-      interfaceDeviceMap.get(device.intf).push(device);
     });
     
-    // Debug log for device mapping
-    console.log('Interface to device mapping:', 
-      Array.from(interfaceDeviceMap.entries())
-        .map(([intf, devs]) => `${intf}: ${devs.length} devices`)
-    );
+    console.log('Device map created with', interfaceDeviceMap.size, 'interfaces having devices');
     
-    // Add device nodes connected to interfaces
+    // Process all devices in one go for interfaces 
     filteredInterfaces.forEach((iface) => {
       const sourceNode = flowNodes.find(node => 
         node.type === 'interface' && 
@@ -158,17 +237,54 @@
         const connectedDevices = interfaceDeviceMap.get(iface.device) || [];
         const deviceCount = connectedDevices.length;
         
-        // Fan out devices in horizontal rows to the right of each interface
-        connectedDevices.forEach((device, idx) => {
+        console.log(`Processing ${connectedDevices.length} devices for interface ${iface.device}`);
+        
+        // Apply device limit based on device count
+        // Limit if there are many devices to prevent overcrowding
+        // Apply consistent limiting rules across all platforms
+    const shouldLimit = (totalDeviceCount > 50 && deviceCount > deviceLimit) || deviceCount > 30;
+        
+        // Sort connected devices to prioritize important ones (permanent devices first, then by hostname)
+        const sortedDevices = [...connectedDevices].sort((a, b) => {
+          // Permanent devices first
+          if (a.permanent && !b.permanent) return -1;
+          if (!a.permanent && b.permanent) return 1;
+          
+          // Then non-expired devices
+          if (!a.expired && b.expired) return -1;
+          if (a.expired && !b.expired) return 1;
+          
+          // Then sort by hostname if available
+          if (a.hostname && b.hostname) return a.hostname.localeCompare(b.hostname);
+          
+          return 0;
+        });
+        
+        // Apply the device limit if needed
+        const devicesToShow = shouldLimit ? sortedDevices.slice(0, deviceLimit) : sortedDevices;
+        
+        // Add a "more devices" indicator if we're limiting the view
+        let isLimited = deviceCount > devicesToShow.length;
+        let limitIndicator = null;
+        
+        if (isLimited) {
+          // Create a visual indicator for additional devices that aren't shown
+          const hiddenCount = deviceCount - devicesToShow.length;
+          console.log(`Hiding ${hiddenCount} devices for interface ${iface.device} due to limits`);
+        }
+        
+        devicesToShow.forEach((device, idx) => {
           const deviceId = `device-${device.mac}`;
-          const devicesPerColumn = Math.min(4, deviceCount); // Max 4 devices per column
+          const devicesPerColumn = Math.min(3, deviceCount); // Consistent 3 devices per column on all platforms
           const columnNumber = Math.floor(idx / devicesPerColumn);
           const positionInColumn = idx % devicesPerColumn;
           
-          // Calculate device position
+          // Calculate device position with more spacing to prevent overlap
           const deviceX = sourceNode.position.x + 150 + (columnNumber * deviceRowWidth);
-          const columnStartY = sourceNode.position.y - ((devicesPerColumn - 1) * 70) / 2;
-          const deviceY = columnStartY + positionInColumn * 70;
+          // Adjust the column start Y to position device nodes proportionally 
+          const columnStartY = sourceNode.position.y - ((devicesPerColumn - 1) * 100) / 2;
+          // Use 100px vertical spacing between devices in the same column
+          const deviceY = columnStartY + positionInColumn * 100;
           
           flowNodes.push({
             id: deviceId,
@@ -184,81 +300,143 @@
           const isExpired = device.expired;
           const isPermanent = device.permanent;
           
+          // Create edge with distinctive styling
           flowEdges.push({
             id: `${sourceNode.id}-${deviceId}`,
             source: sourceNode.id,
             target: deviceId,
-            animated: !isExpired,
+            // Remove animation for better performance
+          animated: false,
             style: { 
-              stroke: isExpired ? 'rgba(158, 158, 158, 0.5)' : 
-                     isPermanent ? 'rgba(33, 150, 243, 0.7)' : 
+              stroke: isExpired ? 'rgba(158, 158, 158, 0.4)' : 
+                     isPermanent ? 'rgba(33, 150, 243, 0.8)' : 
                      'rgba(103, 58, 183, 0.7)',
-              strokeWidth: isPermanent ? 2 : 1.5,
-              strokeDasharray: isExpired ? '5,5' : undefined
+              strokeWidth: isPermanent ? 2.5 : 1.8,
+              // Use wavy lines for active devices, dots for permanent, dashed for expired
+              strokeDasharray: isExpired ? '5,5' : 
+                              isPermanent ? '1,5' : 
+                              undefined
             },
-            data: { deviceStatus: isExpired ? 'expired' : isPermanent ? 'permanent' : 'active' }
+            data: { deviceStatus: isExpired ? 'expired' : isPermanent ? 'permanent' : 'active' },
+            type: 'default'
           });
         });
+        
+        // If devices are being limited, add a visual indicator node
+        if (isLimited) {
+          const hiddenCount = deviceCount - devicesToShow.length;
+          // Calculate position for the indicator - after the last column
+          const columnsUsed = Math.ceil(devicesToShow.length / 3); 
+          const indicatorX = sourceNode.position.x + 150 + (columnsUsed * deviceRowWidth);
+          const indicatorY = sourceNode.position.y;
+          
+          // Create indicator node showing how many devices are hidden
+          const indicatorId = `indicator-${iface.device}`;
+          flowNodes.push({
+            id: indicatorId,
+            type: 'device', // Reuse the device node type for simplicity
+            position: { x: indicatorX, y: indicatorY },
+            data: {
+              label: `+${hiddenCount} more`,
+              deviceData: {
+                mac: `indicator-${iface.device}`,
+                ipv4_addresses: [],
+                ipv6_addresses: [],
+                intf: iface.device,
+                manufacturer: '',
+                hostname: `+${hiddenCount} more devices`, 
+                intf_description: iface.description || iface.device,
+                indicator: true, // Special flag for styling
+                isIndicator: true // For special handling in the DeviceNode component
+              }
+            }
+          });
+          
+          // Add edge from interface to indicator with consistent structure
+          flowEdges.push({
+            id: `${sourceNode.id}-${indicatorId}`,
+            source: sourceNode.id,
+            target: indicatorId,
+            style: { 
+              stroke: 'rgba(158, 158, 158, 0.6)',
+              strokeWidth: 1.5,
+              strokeDasharray: '2,3'
+            },
+            data: { deviceStatus: 'indicator' },
+            type: 'default'
+          });
+        }
       }
     });
     
+    // Update all nodes and edges at once
+    console.log(`Setting ${flowNodes.length} nodes and ${flowEdges.length} edges`);
     nodes.set(flowNodes);
-    edges.set(flowEdges);
+    
+    // Ensure edges is always an array before setting it to prevent TypeError
+    if (!Array.isArray(flowEdges)) {
+      console.error('flowEdges is not an array:', flowEdges);
+      edges.set([]);
+    } else {
+      edges.set(flowEdges);
+    }
+    
+    // Give a short delay before fitting the view
+    setTimeout(() => {
+      if (reactFlowInstance) {
+        console.log('Fitting view after all nodes loaded');
+        reactFlowInstance.fitView(fitViewOptions);
+      }
+    }, 100);
   }
 
-  // Event handlers
+  // Simplified event handlers with less redundancy and better debugging
   function handleNodeClick(event) {
-    // Click events will be handled by custom node components
-    if (!event || !event.detail || !event.detail.node) {
-      console.log('Invalid node click event');
+    if (!event?.detail?.node) {
+      console.log('No node in click event:', event);
       return;
     }
     
-    console.log('Node clicked:', event.detail.node.id);
-    
     try {
-      // Get the node data to manually forward the event if needed
       const clickedNode = event.detail.node;
-      if (clickedNode && clickedNode.type) {
-        console.log('Node click forwarded for:', clickedNode.type);
-        
-        // DIRECT EVENT DISPATCH - Bypass custom event system
-        if (clickedNode.type === 'device' && clickedNode.data && clickedNode.data.deviceData) {
-          console.log('DIRECT DISPATCH for device:', clickedNode.data.deviceData);
-          dispatch('elementSelect', {
-            element: clickedNode.data.deviceData,
-            type: 'device'
-          });
-        } else if (clickedNode.type === 'interface' && clickedNode.data && clickedNode.data.interfaceData) {
-          console.log('DIRECT DISPATCH for interface:', clickedNode.data.interfaceData);
-          dispatch('elementSelect', {
-            element: clickedNode.data.interfaceData,
-            type: 'interface'
-          });
-        }
+      console.log('Node clicked:', clickedNode);
+      
+      if (clickedNode.type === 'device' && clickedNode.data?.deviceData) {
+        console.log('Device node clicked:', clickedNode.data.deviceData);
+        handleElementSelectDirect(clickedNode.data.deviceData, 'device');
+      } else if (clickedNode.type === 'interface' && clickedNode.data?.interfaceData) {
+        console.log('Interface node clicked:', clickedNode.data.interfaceData);
+        handleElementSelectDirect(clickedNode.data.interfaceData, 'interface');
+      } else {
+        console.log('Unknown node type or missing data:', clickedNode);
       }
     } catch (error) {
       console.error('Error handling node click:', error);
     }
   }
   
-  function handleNodeEvent(event) {
-    // Forward the event to parent component with the correct structure
-    console.log('Node selection event in TopologyMap:', event.detail);
+  // Track node position changes
+  function handleNodeDragStop(event) {
+    if (!event?.detail?.node) return;
     
-    if (event && event.detail) {
-      console.log('Dispatching elementSelect from TopologyMap (namespaced):', event.detail);
-      // Forward the event to parent using elementSelect
-      dispatch('elementSelect', event.detail);
+    // Update node position in the store to maintain positions
+    try {
+      const { node } = event.detail;
+      const updatedNodes = $nodes.map(n => 
+        n.id === node.id 
+          ? { ...n, position: node.position } 
+          : n
+      );
+      nodes.set(updatedNodes);
+    } catch (error) {
+      console.error('Error updating node position:', error);
     }
   }
   
-  // Handle regular select events from nodes
-  function handleSelectEvent(event) {
-    if (event && event.detail) {
-      console.log('Regular select event in TopologyMap:', event.detail);
-      console.log('Dispatching elementSelect from TopologyMap (regular):', event.detail);
-      dispatch('elementSelect', event.detail);
+  // Simplified unified handler for all node events
+  function handleNodeEvent(event) {
+    if (event?.detail?.element) {
+      handleElementSelectDirect(event.detail.element, event.detail.type);
     }
   }
 
@@ -267,14 +445,27 @@
     prepareFlowData();
   }
   
-  // Layout settings
+  // Layout settings - increased padding for better visibility
   const fitViewOptions = { 
-    padding: 0.1,  // Reduce padding to use more space
+    padding: 0.2,  // Increased padding to ensure all nodes are visible
     includeHiddenNodes: false,  // Only include visible nodes
-    minZoom: 0.3,  // Allow zooming out further
-    maxZoom: 2.5  // Allow zooming in closer
+    minZoom: 0.2,  // Allow zooming out further
+    maxZoom: 2.5   // Allow zooming in closer
   };
   let reactFlowInstance;
+  
+  // Force re-render hack to ensure the flow is properly initialized
+  let key = 0;
+  
+  // Reset the component if we detect any issues
+  function resetFlow() {
+    key += 1;
+    setTimeout(() => {
+      if (reactFlowInstance) {
+        reactFlowInstance.fitView(fitViewOptions);
+      }
+    }, 500);
+  }
   
   onMount(() => {
     prepareFlowData();
@@ -285,13 +476,31 @@
     console.log('SvelteFlow initialized');
     reactFlowInstance = event.detail;
     
-    // Give a slight delay to ensure nodes are properly rendered before fitting
-    setTimeout(() => {
-      if (reactFlowInstance && interfaces.length > 0) {
-        console.log('Auto-fitting view on initialization');
-        reactFlowInstance.fitView(fitViewOptions);
-      }
-    }, 200);  // Increased delay for more reliable rendering
+    // Make sure the flow instance has proper methods
+    if (reactFlowInstance) {
+      console.log('Flow instance methods:', Object.keys(reactFlowInstance));
+      
+      // Force set viewport to make sure panning works
+      reactFlowInstance.setViewport({ x: 0, y: 0, zoom: 1 });
+      
+      // Give a slight delay to ensure nodes are properly rendered before fitting
+      setTimeout(() => {
+        if (reactFlowInstance && interfaces.length > 0) {
+          console.log('Auto-fitting view on initialization');
+          try {
+            reactFlowInstance.fitView(fitViewOptions);
+            // Try zooming out a bit to show more context
+            const currentViewport = reactFlowInstance.getViewport();
+            reactFlowInstance.setViewport({ 
+              ...currentViewport, 
+              zoom: Math.max(0.8, currentViewport.zoom * 0.9)
+            });
+          } catch (err) {
+            console.error('Error fitting view:', err);
+          }
+        }
+      }, 300);  // Increased delay for more reliable rendering
+    }
   }
   
   // Refit view when data changes
@@ -352,7 +561,7 @@
                   <div class="flex items-center gap-2">
                     <div class="w-7 h-7 rounded-full bg-base-content/20 flex items-center justify-center">
                       <svg class="w-4 h-4" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M7,15H9V18H13V15H15V18H16A1,1 0 0,0 17,17V7A1,1 0 0,0 16,6H8A1,1 0 0,0 7,7V17A1,1 0 0,0 8,18H9V15M10,7H14V9H10V7M10,10H14V12H10V10M8,13H16V14H8V13Z" />
+                        <path fill="currentColor" d={mdiEthernet} />
                       </svg>
                     </div>
                     <span class="text-xs">Physical</span>
@@ -360,7 +569,7 @@
                   <div class="flex items-center gap-2">
                     <div class="w-7 h-7 rounded-full bg-base-content/20 flex items-center justify-center">
                       <svg class="w-4 h-4" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M4,1C2.89,1 2,1.89 2,3V7C2,8.11 2.89,9 4,9H1V11H13V9H10C11.11,9 12,8.11 12,7V3C12,1.89 11.11,1 10,1H4M4,3H10V7H4V3M3,13V18L3,20H10V18H5V13H3M14,13C12.89,13 12,13.89 12,15V19C12,20.11 12.89,21 14,21H20C21.11,21 22,20.11 22,19V15C22,13.89 21.11,13 20,13H14M14,15H20V19H14V15Z" />
+                        <path fill="currentColor" d={mdiLan} />
                       </svg>
                     </div>
                     <span class="text-xs">VLAN</span>
@@ -368,7 +577,7 @@
                   <div class="flex items-center gap-2">
                     <div class="w-7 h-7 rounded-full bg-base-content/20 flex items-center justify-center">
                       <svg class="w-4 h-4" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M12,21L15.6,16.2C14.6,15.45 13.35,15 12,15C10.65,15 9.4,15.45 8.4,16.2L12,21M12,3C7.95,3 4.21,4.34 1.2,6.6L3,9C5.5,7.12 8.62,6 12,6C15.38,6 18.5,7.12 21,9L22.8,6.6C19.79,4.34 16.05,3 12,3M12,9C9.3,9 6.81,9.89 4.8,11.4L6.6,13.8C8.1,12.67 9.97,12 12,12C14.03,12 15.9,12.67 17.4,13.8L19.2,11.4C17.19,9.89 14.7,9 12,9Z" />
+                        <path fill="currentColor" d={mdiAccessPoint} />
                       </svg>
                     </div>
                     <span class="text-xs">Wireless</span>
@@ -376,7 +585,7 @@
                   <div class="flex items-center gap-2">
                     <div class="w-7 h-7 rounded-full bg-base-content/20 flex items-center justify-center">
                       <svg class="w-4 h-4" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M10,2C8.89,2 8,2.89 8,4V7C8,8.11 8.89,9 10,9H11V11H2V13H6V15H5C3.89,15 3,15.89 3,17V20C3,21.11 3.89,22 5,22H9C10.11,22 11,21.11 11,20V17C11,15.89 10.11,15 9,15H8V13H16V15H15C13.89,15 13,15.89 13,17V20C13,21.11 13.89,22 15,22H19C20.11,22 21,21.11 21,20V17C21,15.89 20.11,15 19,15H18V13H22V11H13V9H14C15.11,9 16,8.11 16,7V4C16,2.89 15.11,2 14,2H10M10,4H14V7H10V4M5,17H9V20H5V17M15,17H19V20H15V17Z" />
+                        <path fill="currentColor" d={mdiServerNetwork} />
                       </svg>
                     </div>
                     <span class="text-xs">Virtual</span>
@@ -389,34 +598,46 @@
                 <div class="text-sm font-semibold mb-2 pb-1 border-b">Device Types</div>
                 <div class="grid grid-cols-1 gap-2">
                   <div class="flex items-center gap-2">
-                    <div class="w-7 h-7 rounded-full bg-[#2196F3] flex items-center justify-center">
-                      <svg class="w-4 h-4" viewBox="0 0 24 24">
-                        <path fill="white" d="M11,2A8,8 0 0,0 3,10V11H11V13H3V14A8,8 0 0,0 11,22H13A8,8 0 0,0 21,14V13H13V11H21V10A8,8 0 0,0 13,2H11M11,4H13A6,6 0 0,1 19,10H5A6,6 0 0,1 11,4Z" />
-                      </svg>
+                    <div class="w-7 h-7 rounded-md overflow-hidden device-legend-item">
+                      <div class="h-1/3 bg-blue-500"></div>
+                      <div class="h-2/3 bg-white dark:bg-gray-700 flex items-center justify-center text-black dark:text-white">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24">
+                          <path fill="currentColor" d={mdiRouter} />
+                        </svg>
+                      </div>
                     </div>
                     <span class="text-xs">Router</span>
                   </div>
                   <div class="flex items-center gap-2">
-                    <div class="w-7 h-7 rounded-full bg-[#673AB7] flex items-center justify-center">
-                      <svg class="w-4 h-4" viewBox="0 0 24 24">
-                        <path fill="white" d="M20,18C21.1,18 22,17.1 22,16V6C22,4.89 21.1,4 20,4H4C2.89,4 2,4.89 2,6V16A2,2 0 0,0 4,18H0V20H24V18H20M4,16V6H20V16H4Z" />
-                      </svg>
+                    <div class="w-7 h-7 rounded-md overflow-hidden device-legend-item">
+                      <div class="h-1/3 bg-purple-500"></div>
+                      <div class="h-2/3 bg-white dark:bg-gray-700 flex items-center justify-center text-black dark:text-white">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24">
+                          <path fill="currentColor" d={mdiLaptop} />
+                        </svg>
+                      </div>
                     </div>
                     <span class="text-xs">Computer</span>
                   </div>
                   <div class="flex items-center gap-2">
-                    <div class="w-7 h-7 rounded-full bg-[#673AB7] flex items-center justify-center">
-                      <svg class="w-4 h-4" viewBox="0 0 24 24">
-                        <path fill="white" d="M17,19H7V5H17M17,1H7C5.89,1 5,1.89 5,3V21A2,2 0 0,0 7,23H17A2,2 0 0,0 19,21V3C19,1.89 18.1,1 17,1Z" />
-                      </svg>
+                    <div class="w-7 h-7 rounded-md overflow-hidden device-legend-item">
+                      <div class="h-1/3 bg-purple-500"></div>
+                      <div class="h-2/3 bg-white dark:bg-gray-700 flex items-center justify-center text-black dark:text-white">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24">
+                          <path fill="currentColor" d={mdiCellphone} />
+                        </svg>
+                      </div>
                     </div>
                     <span class="text-xs">Mobile Device</span>
                   </div>
                   <div class="flex items-center gap-2">
-                    <div class="w-7 h-7 rounded-full bg-[#673AB7] flex items-center justify-center">
-                      <svg class="w-4 h-4" viewBox="0 0 24 24">
-                        <path fill="white" d="M4,1H20A1,1 0 0,1 21,2V6A1,1 0 0,1 20,7H4A1,1 0 0,1 3,6V2A1,1 0 0,1 4,1M4,9H20A1,1 0 0,1 21,10V14A1,1 0 0,1 20,15H4A1,1 0 0,1 3,14V10A1,1 0 0,1 4,9M4,17H20A1,1 0 0,1 21,18V22A1,1 0 0,1 20,23H4A1,1 0 0,1 3,22V18A1,1 0 0,1 4,17M9,5H10V3H9V5M9,13H10V11H9V13M9,21H10V19H9V21M5,3V5H7V3H5M5,11V13H7V11H5M5,19V21H7V19H5Z" />
-                      </svg>
+                    <div class="w-7 h-7 rounded-md overflow-hidden device-legend-item">
+                      <div class="h-1/3 bg-orange-500"></div>
+                      <div class="h-2/3 bg-white dark:bg-gray-700 flex items-center justify-center text-black dark:text-white">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24">
+                          <path fill="currentColor" d={mdiServerNetwork} />
+                        </svg>
+                      </div>
                     </div>
                     <span class="text-xs">Server</span>
                   </div>
@@ -476,11 +697,25 @@
       </div>
     {:else}
       <div class="relative w-full h-full"
-        on:nodeClick={(event) => {
-          console.log('nodeClick custom event bubbled to container:', event);
+        on:elementSelect={(event) => {
+          console.log('elementSelect event bubbled to container:', event);
           if (event.detail && event.detail.element) {
-            console.log('Processing bubbled nodeClick event');
+            console.log('Processing bubbled elementSelect event');
             handleElementSelectDirect(event.detail.element, event.detail.type);
+          }
+        }}
+        on:device:select={(event) => {
+          console.log('device:select event bubbled to container:', event);
+          if (event.detail && event.detail.element) {
+            console.log('Processing bubbled device:select event');
+            handleElementSelectDirect(event.detail.element, 'device');
+          }
+        }}
+        on:interface:select={(event) => {
+          console.log('interface:select event bubbled to container:', event);
+          if (event.detail && event.detail.element) {
+            console.log('Processing bubbled interface:select event');
+            handleElementSelectDirect(event.detail.element, 'interface');
           }
         }}
        >
@@ -488,7 +723,7 @@
         {#if interfaces.length > 0}
           <div 
             class="absolute pointer-events-none z-0 rounded-2xl firewall-container"
-            style="left: 50px; top: 30px; width: 330px; height: {(interfaces.length * 200) + (interfaces.length * 60) + 100}px;"
+            style="left: 30px; top: 30px; width: 220px; height: {Math.min(2500, (interfaces.length * 200) + (interfaces.length * 150) + 150)}px;"
           >
             <!-- Add a subtle grid pattern -->
             <div class="absolute inset-0 opacity-20" 
@@ -524,37 +759,41 @@
         </div>
         
         <SvelteFlow
-          {nodes}
-          {edges}
+          {key}
+          nodes={$nodes}
+          edges={$edges}
           {nodeTypes}
           fitView={true}
           {fitViewOptions}
           on:init={handleInit}
           on:nodeClick={handleNodeClick}
-          on:select={handleSelectEvent}
-          on:interface:select={handleNodeEvent}
+          on:nodeDragStop={handleNodeDragStop} 
+          on:elementSelect={handleNodeEvent}
           on:device:select={handleNodeEvent}
+          on:interface:select={handleNodeEvent}
           elevateEdgesOnSelect={true}
           nodesDraggable={true}
           nodesConnectable={false}
           zoomOnScroll={true}
           panOnScroll={true}
+          panOnDrag={true}
           selectionOnDrag={false}
           defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-          minZoom={0.3}
+          minZoom={0.2}
           maxZoom={2.5}
           proOptions={{ hideAttribution: true }}
-          on:nodeClick={(event) => {
-            console.log('SvelteFlow nodeClick event:', event);
-            if (event && event.detail && event.detail.node) {
-              const node = event.detail.node;
-              if (node.type === 'device' && node.data && node.data.deviceData) {
-                handleElementSelectDirect(node.data.deviceData, 'device');
-              } else if (node.type === 'interface' && node.data && node.data.interfaceData) {
-                handleElementSelectDirect(node.data.interfaceData, 'interface');
-              }
+          maxNodes={10000} 
+          connectionMode="loose"
+          snapToGrid={false}
+          defaultEdgeOptions={{ 
+            type: 'default',
+            animated: false,
+            style: {
+              strokeLinecap: 'round',
+              strokeLinejoin: 'round'
             }
           }}
+          onlyRenderVisibleElements={false}
         >
           <Background 
             variant="dots" 
@@ -611,9 +850,12 @@
   }
   
   :global(.svelte-flow__edge-path) {
-    stroke: rgba(75, 85, 99, 0.6);
-    stroke-width: 1.75;
+    stroke: rgba(75, 85, 99, 0.7);
+    stroke-width: 2;
     transition: stroke 0.3s ease, stroke-width 0.3s ease;
+    /* Add rounded line caps for nicer appearance */
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
   
   :global(.svelte-flow__edge.selected .svelte-flow__edge-path) {
@@ -647,6 +889,16 @@
     pointer-events: all !important;
     cursor: pointer;
     transition: transform 0.3s ease;
+  }
+  
+  /* Special styling for the indicator nodes */
+  :global(.svelte-flow__node[data-indicator="true"]) {
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+  }
+  
+  :global(.svelte-flow__node[data-indicator="true"]:hover) {
+    opacity: 1;
   }
   
   :global(.svelte-flow__handle) {
@@ -709,6 +961,38 @@
     filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.5));
   }
   
+  /* Mobile device optimizations */
+  @media (max-width: 768px) {
+    :global(.svelte-flow__edge-path) {
+      stroke-width: 1.25 !important;
+    }
+    
+    :global(.svelte-flow__edge.animated .svelte-flow__edge-path) {
+      animation: none !important;
+    }
+    
+    :global(.svelte-flow__controls) {
+      transform: scale(0.75);
+      bottom: 15px;
+    }
+  }
+  
+  /* iOS-specific optimizations */
+  @supports (-webkit-touch-callout: none) {
+    :global(.svelte-flow__edge.animated .svelte-flow__edge-path) {
+      animation: none !important;
+    }
+    
+    :global(.svelte-flow__node) {
+      transform: translateZ(0);
+    }
+    
+    :global(.svelte-flow__controls button) {
+      width: 24px !important;
+      height: 24px !important;
+    }
+  }
+  
   /* Add style for the transparent topology container */
   .topology-container {
     position: relative;
@@ -745,6 +1029,11 @@
     background: linear-gradient(135deg, rgba(30, 41, 59, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%);
     box-shadow: 0 0 25px rgba(59, 130, 246, 0.1), inset 0 0 5px rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(59, 130, 246, 0.2);
+  }
+  
+  /* Ensure device legend items have proper contrast in dark mode */
+  .device-legend-item {
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
   
   /* Control styling for fit-view button */

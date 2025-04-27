@@ -184,16 +184,33 @@
   }
 
   async function handleSubmit() {
-    if (!ruleData.interface) {
-      toasts.error("Please select an interface");
-      return;
-    }
+    // Don't require interface - if left blank, it means "any interface"
+    // (removed the interface validation check that was here)
 
     isSubmitting = true;
     
     try {
-      const payload = { rule: ruleData };
+      // Clean up the data being sent - remove any UI-specific fields
+      const cleanedRuleData = {...ruleData};
+      
+      // Remove UI-specific fields
+      delete cleanedRuleData.source_type;
+      delete cleanedRuleData.destination_type;
+      
+      // If specific fields are empty, set them to the expected values
+      if (!cleanedRuleData.interface) {
+        // Empty interface means "any interface" in OPNsense
+        cleanedRuleData.interface = "";
+      }
+      
+      // Create the payload following the OPNsense API structure
+      const payload = { rule: cleanedRuleData };
+      
+      console.log("Sending rule payload:", JSON.stringify(payload, null, 2));
+      
       const result = await invoke('add_firewall_rule', { ruleData: payload });
+      console.log("Add firewall rule result:", result);
+      
       toasts.success('Firewall rule added successfully');
       dispatch('refresh');
       closeModal();
@@ -270,14 +287,14 @@
           <!-- Interface -->
           <div class="form-control">
             <label class="label" for="interface">
-              <span class="label-text">Interface</span>
+              <span class="label-text">Interface (optional - leave blank for any)</span>
             </label>
             <select 
               id="interface" 
               bind:value={ruleData.interface} 
               class="select select-bordered w-full"
             >
-              <option value="">Select Interface</option>
+              <option value="">Any Interface</option>
               {#each interfaces as iface}
                 <option value={iface.key}>{iface.value}</option>
               {/each}

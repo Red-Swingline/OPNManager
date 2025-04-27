@@ -7,10 +7,12 @@
   import InitialSetupForm from "$lib/components/forms/InitialSetupForm.svelte";
   import DashboardConfig from "$lib/components/dashboard/DashboardConfig.svelte";
   import InterfaceTrafficGraph from "$lib/components/dashboard/InterfaceTrafficGraph.svelte";
-import CpuTemperatureCard from "$lib/components/dashboard/CpuTemperatureCard.svelte";
+  import CpuTemperatureCard from "$lib/components/dashboard/CpuTemperatureCard.svelte";
+  import { WolWidget } from "$lib/components/dashboard";
   import { toasts } from "$lib/stores/toastStore";
   import { authStore } from "$lib/stores/authStore";
   import { dashboardStore } from "$lib/stores/dashboardStore";
+  import { cleanupDashboardResources } from "$lib/utils/dashboardCleanup";
   import {
     mdiRestart,
     mdiChevronDown,
@@ -233,8 +235,14 @@ import CpuTemperatureCard from "$lib/components/dashboard/CpuTemperatureCard.sve
   });
 
   onDestroy(() => {
+    console.log("Dashboard page destroyed - cleaning up resources");
     if (pollInterval) window.clearInterval(pollInterval);
     if (progressInterval) window.clearInterval(progressInterval);
+    
+    // Clean up dashboard resources when navigating away from the dashboard
+    cleanupDashboardResources().catch(error => {
+      console.error("Failed to clean up dashboard resources:", error);
+    });
   });
 
   async function handleInitialSetup(
@@ -298,12 +306,12 @@ import CpuTemperatureCard from "$lib/components/dashboard/CpuTemperatureCard.sve
 
   function getNetworkWidgetOrder(): string[] {
     if (!$dashboardStore.isLoaded) {
-      return ["traffic_graph", "gateways", "interfaces"];
+      return ["traffic_graph", "gateways", "interfaces", "wol"];
     }
 
     return $dashboardStore.widgets
       .filter((w) =>
-        ["traffic_graph", "gateways", "interfaces"].includes(w.widget_key),
+        ["traffic_graph", "gateways", "interfaces", "wol"].includes(w.widget_key),
       )
       .sort((a, b) => a.position - b.position)
       .map((w) => w.widget_key);
@@ -316,10 +324,11 @@ import CpuTemperatureCard from "$lib/components/dashboard/CpuTemperatureCard.sve
         "memory",
         "cpu_temp",
         "disk",
-        "services",
+        "services", 
         "traffic_graph",
         "gateways",
         "interfaces",
+        "wol",
       ];
     }
 
@@ -748,6 +757,11 @@ import CpuTemperatureCard from "$lib/components/dashboard/CpuTemperatureCard.sve
                   </div>
                 </div>
               {/if}
+              
+              {#if widgetKey === "wol"}
+                <WolWidget />
+              {/if}
+
             {/if}
           {/each}
         </div>
@@ -905,6 +919,11 @@ import CpuTemperatureCard from "$lib/components/dashboard/CpuTemperatureCard.sve
                     </div>
                   </div>
                 {/if}
+                
+                {#if widgetKey === "wol"}
+                  <WolWidget />
+                {/if}
+
               {/if}
             {/each}
           </div>

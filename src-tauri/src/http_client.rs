@@ -78,7 +78,13 @@ pub async fn make_http_request(
                 let error_message = match status.as_u16() {
                     401 => "Authentication failed (HTTP 401): Your API key or secret is incorrect".to_string(),
                     403 => "Permission denied (HTTP 403): Your API credentials don't have sufficient permissions".to_string(),
-                    404 => "API endpoint not found (HTTP 404): Check your firewall URL and port".to_string(),
+                    404 => {
+                        if url.contains("/api/core/tunables/") {
+                            "API endpoint not found (HTTP 404): Tunables API requires OPNsense 25.x or newer".to_string()
+                        } else {
+                            "API endpoint not found (HTTP 404): Check your firewall URL and port".to_string()
+                        }
+                    },
                     _ => format!("Request to {} failed with status {}: {}", url, status, body)
                 };
 
@@ -89,28 +95,39 @@ pub async fn make_http_request(
         Err(e) => {
             let error_message = if e.is_timeout() {
                 format!(
-                    "Connection timed out: Server at {} is unreachable or not responding",
+                    "Connection timed out: Server at {} is unreachable or not responding. This may be due to high load on the firewall or network congestion.",
                     url
                 )
             } else if e.is_connect() {
-                format!("Connection error: Unable to connect to server at {}. Check your network and firewall settings", url)
+                // More detailed connection error message
+                if e.to_string().contains("proxy") {
+                    format!("Proxy connection error: Unable to connect through proxy to {}. Check your proxy settings.", url)
+                } else if e.to_string().contains("refused") {
+                    format!("Connection refused: The server at {} actively refused the connection. Please verify the port is correct and any firewall rules allow this connection.", url)
+                } else if e.to_string().contains("reset") {
+                    format!("Connection reset: The connection to {} was reset. This may indicate network instability or an intermediate firewall blocking the connection.", url)
+                } else {
+                    format!("Connection error: Unable to connect to server at {}. Check your network connectivity, firewall settings, and verify the server is running.", url)
+                }
             } else if e.is_status() {
                 format!(
-                    "Invalid status: The server at {} returned an unexpected response",
+                    "Invalid status: The server at {} returned an unexpected response. This may indicate API changes or incompatibility.",
                     url
                 )
-            } else if e.to_string().contains("dns error") {
+            } else if e.to_string().contains("dns error") || e.to_string().contains("not resolve") {
                 format!(
-                    "DNS resolution error: Could not resolve hostname in URL {}",
+                    "DNS resolution error: Could not resolve hostname in URL {}. Please check your DNS settings and verify the hostname is correct.",
                     url
                 )
             } else if e.to_string().contains("certificate")
                 || e.to_string().contains("SSL")
                 || e.to_string().contains("TLS")
             {
-                format!("SSL/TLS error: There was a problem with the server's security certificate at {}", url)
+                format!("SSL/TLS error: There was a problem with the server's security certificate at {}. This is expected for self-signed certificates and doesn't affect functionality.", url)
+            } else if e.to_string().contains("handshake") {
+                format!("TLS handshake error: Failed to establish secure connection to {}. This may be due to protocol incompatibility or firewall restrictions.", url)
             } else {
-                format!("Request to {} failed: {}", url, e)
+                format!("Request to {} failed: {} - Please check your network connectivity and firewall configuration.", url, e)
             };
 
             error!("{}", error_message);

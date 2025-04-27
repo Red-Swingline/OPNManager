@@ -234,15 +234,25 @@
     }
   
     async function handleSubmit() {
-      if (!ruleData.interface) {
-        toasts.error("Please select an interface");
-        return;
-      }
-  
+      // Don't require interface - if left blank, it means "any interface"
+      // (removed the interface validation check that was here)
+
       isSubmitting = true;
       
       try {
-        const payload = { rule: ruleData };
+        // Clean up the data being sent - remove any UI-specific fields
+        const cleanedRuleData = {...ruleData};
+        
+        // Remove UI-specific fields
+        delete cleanedRuleData.source_type;
+        delete cleanedRuleData.destination_type;
+        
+        // If interface is empty, it's treated as "any interface" in OPNsense
+        if (!cleanedRuleData.interface) {
+          cleanedRuleData.interface = "";
+        }
+        
+        const payload = { rule: cleanedRuleData };
         await invoke('set_rule', { uuid: ruleUuid, ruleData: payload });
         await invoke('apply_firewall_changes');
         toasts.success('Firewall rule updated successfully');
@@ -321,14 +331,14 @@
             <!-- Interface -->
             <div class="form-control">
               <label class="label" for="interface">
-                <span class="label-text">Interface</span>
+                <span class="label-text">Interface (optional - leave blank for any)</span>
               </label>
               <select 
                 id="interface" 
                 bind:value={ruleData.interface} 
                 class="select select-bordered w-full"
               >
-                <option value="">Select Interface</option>
+                <option value="">Any Interface</option>
                 {#each interfaces as iface}
                   <option value={iface.key}>{iface.value}</option>
                 {/each}

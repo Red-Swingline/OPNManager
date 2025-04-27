@@ -2,6 +2,29 @@
 
 OPNManager is a streamlined, user-friendly application designed to simplify the management of OPNsense firewalls. Built with Tauri and SvelteKit, this cross-platform app provides an intuitive interface for users who need a more simplified alternative to the standard OPNsense web interface.
 
+## Network Topology Visualization Optimization (April 2025)
+
+The network topology visualization feature has been significantly optimized to handle large networks and high-availability setups. Changes include:
+
+### Frontend Optimizations:
+- **Incremental rendering**: Added chunked rendering to avoid UI freezes with large networks
+- **Dynamic device limiting**: Automatically adjusts visible device count based on total network size
+- **Performance mode improvements**: Added better UI indication and automatic fallback for large networks
+- **Reduced event overhead**: Simplified event dispatching system to reduce redundant operations
+- **Timeout handling**: Added proper timeouts with fallbacks for data loading
+- **User experience improvements**: Shows interfaces immediately while devices load incrementally
+- **DOM element reduction**: Disabled node dragging and limited SVG element generation
+
+### Backend Optimizations:
+- **Parallel data fetching**: Using tokio's join for concurrent data retrieval
+- **Improved timeout handling**: Added proper timeout handling with partial data returns
+- **Memory pre-allocation**: Pre-allocate collections to avoid reallocation overhead
+- **Selective sorting**: Only sort collections when they contain multiple items
+- **Increased page size**: Reduced the number of API requests by increasing page size
+- **Better progress reporting**: Added detailed logging to track data loading progress
+
+These optimizations significantly improve the performance for users with complex network topologies, particularly in high-availability setups or networks with many devices.
+
 ## Disclaimer
 
 **OPNManager is an independent project and is not affiliated with or endorsed by the OPNsense project or its developers.** This application is provided "as-is" without any warranties or guarantees. Users should exercise caution and ensure they understand the risks associated with granting API access

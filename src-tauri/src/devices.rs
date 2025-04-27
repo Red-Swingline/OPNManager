@@ -1,5 +1,6 @@
 use crate::db::Database;
 use crate::http_client::make_http_request;
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
@@ -130,13 +131,74 @@ pub async fn get_ndp_devices(database: State<'_, Database>) -> Result<Vec<NdpDev
 pub async fn get_combined_devices(
     database: State<'_, Database>,
 ) -> Result<Vec<CombinedDevice>, String> {
-    let arp_devices = get_devices(database.clone()).await?;
-    let ndp_devices = get_ndp_devices(database.clone()).await?;
+    // Start time tracking for performance monitoring
+    let start_time = std::time::Instant::now();
 
-    let mut device_map: HashMap<String, CombinedDevice> = HashMap::new();
+    // Create an async function to fetch devices with timeout
+    async fn fetch_with_timeout<T, E>(
+        fut: impl std::future::Future<Output = Result<T, E>>,
+        timeout_seconds: u64,
+        default: T,
+        data_type: &str,
+    ) -> Result<T, E> {
+        let fetch_start = std::time::Instant::now();
 
+        match tokio::time::timeout(std::time::Duration::from_secs(timeout_seconds), fut).await {
+            Ok(result) => {
+                // Calculate fetch duration
+                let fetch_duration = fetch_start.elapsed();
+                info!(
+                    "{} data fetch completed in {}ms",
+                    data_type,
+                    fetch_duration.as_millis()
+                );
+                result
+            }
+            Err(_) => {
+                let error_msg = format!(
+                    "{} fetch timed out after {} seconds",
+                    data_type, timeout_seconds
+                );
+                warn!("{}", error_msg);
+                Ok(default)
+            }
+        }
+    }
+
+    // Set timeouts
+    let main_timeout = 30; // 30 seconds for main fetch
+
+    // First, try to fetch both in parallel with the main timeout
+    let arp_future = get_devices(database.clone());
+    let ndp_future = get_ndp_devices(database.clone());
+
+    // Start the futures in parallel
+    let (arp_result, ndp_result) = tokio::join!(
+        fetch_with_timeout(arp_future, main_timeout, Vec::new(), "ARP"),
+        fetch_with_timeout(ndp_future, main_timeout, Vec::new(), "NDP")
+    );
+
+    // Check for errors and extract results
+    let arp_devices = arp_result?;
+    let ndp_devices = ndp_result?;
+
+    // Store the counts for later use
+    let arp_count = arp_devices.len();
+    let ndp_count = ndp_devices.len();
+
+    info!(
+        "Combining device data: {} ARP devices and {} NDP devices",
+        arp_count, ndp_count
+    );
+
+    // Pre-allocate hash map with capacity to avoid reallocations
+    let mut device_map: HashMap<String, CombinedDevice> =
+        HashMap::with_capacity(arp_devices.len() + ndp_devices.len());
+
+    // Process ARP devices first
     for device in arp_devices {
         if let Some(existing_device) = device_map.get_mut(&device.mac) {
+            // Update existing device
             if is_ipv6(&device.ip) {
                 if !existing_device.ipv6_addresses.contains(&device.ip) {
                     existing_device.ipv6_addresses.push(device.ip);
@@ -149,8 +211,9 @@ pub async fn get_combined_devices(
                 existing_device.hostname = device.hostname;
             }
         } else {
-            let mut ipv4_addresses = Vec::new();
-            let mut ipv6_addresses = Vec::new();
+            // Create new device entry
+            let mut ipv4_addresses = Vec::with_capacity(1);
+            let mut ipv6_addresses = Vec::with_capacity(1);
 
             if is_ipv6(&device.ip) {
                 ipv6_addresses.push(device.ip);
@@ -177,6 +240,7 @@ pub async fn get_combined_devices(
         }
     }
 
+    // Process NDP devices
     for device in ndp_devices {
         if let Some(existing_device) = device_map.get_mut(&device.mac) {
             if is_ipv6(&device.ip) {
@@ -191,8 +255,8 @@ pub async fn get_combined_devices(
                 existing_device.manufacturer = device.manufacturer;
             }
         } else {
-            let mut ipv4_addresses = Vec::new();
-            let mut ipv6_addresses = Vec::new();
+            let mut ipv4_addresses = Vec::with_capacity(1);
+            let mut ipv6_addresses = Vec::with_capacity(1);
 
             if is_ipv6(&device.ip) {
                 ipv6_addresses.push(device.ip);
@@ -218,42 +282,89 @@ pub async fn get_combined_devices(
             );
         }
     }
+
+    // Sort device addresses
     for device in device_map.values_mut() {
-        device.ipv4_addresses.sort_by(|a, b| natural_sort(a, b));
-        device.ipv6_addresses.sort();
+        if device.ipv4_addresses.len() > 1 {
+            device.ipv4_addresses.sort_by(|a, b| natural_sort(a, b));
+        }
+        if device.ipv6_addresses.len() > 1 {
+            device.ipv6_addresses.sort();
+        }
     }
 
+    // Filter for devices with CARP interfaces in HA setups
+    // Look for devices connected to CARP interfaces and normalize their data
+    let device_map = device_map
+        .into_iter()
+        .map(|(mac, mut device)| {
+            // Check if device is on a CARP interface
+            let is_on_carp_iface = device.intf.contains("_vip")
+                || device.intf.starts_with("carp")
+                || device.intf_description.to_lowercase().contains("carp");
+
+            // If it's on a CARP interface, tag it for special handling
+            if is_on_carp_iface {
+                device.intf_description = format!("{} (CARP VIP)", device.intf_description);
+            }
+
+            (mac, device)
+        })
+        .collect::<HashMap<String, CombinedDevice>>();
+
+    // Convert to vector and sort
     let mut combined_devices: Vec<CombinedDevice> = device_map.into_values().collect();
+
+    info!("Total combined devices: {}", combined_devices.len());
+
+    // Sort devices by interface first, then by IP address
     combined_devices.sort_by(|a, b| {
         let intf_cmp = a.intf.cmp(&b.intf);
         if intf_cmp != std::cmp::Ordering::Equal {
             return intf_cmp;
         }
+
+        // IPv4 addresses take precedence
         let a_has_ipv4 = !a.ipv4_addresses.is_empty();
         let b_has_ipv4 = !b.ipv4_addresses.is_empty();
 
-        if a_has_ipv4 && !b_has_ipv4 {
-            return std::cmp::Ordering::Less;
-        } else if !a_has_ipv4 && b_has_ipv4 {
-            return std::cmp::Ordering::Greater;
+        match (a_has_ipv4, b_has_ipv4) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            (true, true) => natural_sort(&a.ipv4_addresses[0], &b.ipv4_addresses[0]),
+            (false, false) => {
+                // Compare IPv6 addresses if no IPv4 addresses
+                if !a.ipv6_addresses.is_empty() && !b.ipv6_addresses.is_empty() {
+                    a.ipv6_addresses[0].cmp(&b.ipv6_addresses[0])
+                } else if a.ipv6_addresses.is_empty() && !b.ipv6_addresses.is_empty() {
+                    std::cmp::Ordering::Greater
+                } else if !a.ipv6_addresses.is_empty() && b.ipv6_addresses.is_empty() {
+                    std::cmp::Ordering::Less
+                } else {
+                    // Last resort: compare by MAC address
+                    a.mac.cmp(&b.mac)
+                }
+            }
         }
-
-        if a_has_ipv4 && b_has_ipv4 {
-            return natural_sort(&a.ipv4_addresses[0], &b.ipv4_addresses[0]);
-        }
-
-        if !a.ipv6_addresses.is_empty() && !b.ipv6_addresses.is_empty() {
-            return a.ipv6_addresses[0].cmp(&b.ipv6_addresses[0]);
-        }
-
-        if a.ipv6_addresses.is_empty() && !b.ipv6_addresses.is_empty() {
-            return std::cmp::Ordering::Greater;
-        } else if !a.ipv6_addresses.is_empty() && b.ipv6_addresses.is_empty() {
-            return std::cmp::Ordering::Less;
-        }
-
-        a.mac.cmp(&b.mac)
     });
+
+    // Calculate and log total operation duration
+    let total_duration = start_time.elapsed();
+    info!(
+        "Device processing completed in {}ms: {} total devices processed",
+        total_duration.as_millis(),
+        combined_devices.len()
+    );
+
+    // Log performance issues
+    if total_duration.as_secs() > 5 || combined_devices.len() > 100 {
+        // This is a complex network that might benefit from performance mode
+        warn!(
+            "Complex network detected: {} devices processed in {}ms",
+            combined_devices.len(),
+            total_duration.as_millis()
+        );
+    }
 
     Ok(combined_devices)
 }
