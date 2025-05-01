@@ -1,11 +1,11 @@
 use crate::db::Database;
-use crate::http_client::make_http_request;
+use crate::http_client::{make_http_request, make_http_request_with_form_data};
 use serde_json::{json, Value};
 use tauri::State;
 
-// Check if WoL plugin is installed by checking if UI page exists
+// Check if WoL plugin is installed and API has required permissions
 #[tauri::command]
-pub async fn check_wol_plugin_installed(database: State<'_, Database>) -> Result<bool, String> {
+pub async fn check_wol_plugin_installed(database: State<'_, Database>) -> Result<Value, String> {
     let api_info = database
         .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
@@ -13,6 +13,9 @@ pub async fn check_wol_plugin_installed(database: State<'_, Database>) -> Result
 
     // Try to access the WoL API endpoint
     let url = format!("{}:{}/api/wol/wol/getwake", api_info.api_url, api_info.port);
+
+    // Log more detailed information about the request
+    log::info!("Checking if WoL plugin is installed at: {}", url);
 
     match make_http_request(
         "GET",
@@ -25,8 +28,45 @@ pub async fn check_wol_plugin_installed(database: State<'_, Database>) -> Result
     )
     .await
     {
-        Ok(_) => Ok(true),
-        Err(_) => Ok(false), // If error, assume plugin is not installed
+        Ok(_) => {
+            log::info!("WoL plugin is installed - API endpoint found with correct permissions");
+            Ok(json!({
+                "installed": true,
+                "permission_error": false,
+                "error": null
+            }))
+        },
+        Err(e) => {
+            // Three different cases:
+            // 1. 404 - Plugin is not installed
+            // 2. 403 - Plugin is installed but permissions are wrong
+            // 3. Other errors - Network or server issues
+
+            if e.contains("404") || e.contains("API endpoint not found") {
+                log::info!("WoL plugin is not installed - API endpoint returned 404");
+                Ok(json!({
+                    "installed": false,
+                    "permission_error": false,
+                    "error": null
+                }))
+            } else if e.contains("403") || e.contains("Permission denied") {
+                // This likely means the plugin is installed, but API key doesn't have permission
+                log::warn!("WoL plugin permission error: {}", e);
+                Ok(json!({
+                    "installed": true,
+                    "permission_error": true,
+                    "error": e
+                }))
+            } else {
+                // For other errors, we can't be sure if the plugin is installed or not
+                log::warn!("Error checking if WoL plugin is installed: {}", e);
+                Ok(json!({
+                    "installed": false,
+                    "permission_error": false,
+                    "error": e
+                }))
+            }
+        }
     }
 }
 
@@ -137,35 +177,49 @@ pub async fn get_arp_devices(database: State<'_, Database>) -> Result<Value, Str
 // Wake a device by UUID from saved devices
 #[tauri::command]
 pub async fn wake_device(database: State<'_, Database>, uuid: String) -> Result<Value, String> {
+    // Add debug logs for troubleshooting
+    log::info!("wake_device called with UUID: {}", uuid);
+    
     let api_info = database
         .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
     let url = format!("{}:{}/api/wol/wol/set", api_info.api_url, api_info.port);
+    log::info!("Wake-on-LAN URL: {}", url);
 
-    // The OPNsense WoL API expects the UUID in a specific format
-    let payload = json!({
-        "wake": {
-            "uuid": uuid
-        }
-    });
+    // The OPNsense WoL API expects form-urlencoded data for saved devices
+    // Format: uuid=value (not JSON wrapped)
+    let form_data = format!("uuid={}", uuid);
+    log::info!("Wake-on-LAN request payload: {}", form_data);
 
-    let response = make_http_request(
+    // Use the form data specific HTTP request method
+    let response = make_http_request_with_form_data(
         "POST",
         &url,
-        Some(payload),
+        form_data,
         None,
         Some(30),
         Some(&api_info.api_key),
         Some(&api_info.api_secret),
     )
     .await?;
+    
+    log::info!("Wake-on-LAN response status: {}", response.status());
 
-    response
-        .json::<Value>()
-        .await
-        .map_err(|e| format!("Failed to parse response: {}", e))
+    // Clone the response so we can both log it and return it
+    let response_text = response.text().await.map_err(|e| format!("Failed to get response text: {}", e))?;
+    log::info!("Wake-on-LAN response body: {}", response_text);
+    
+    // Parse the response text into JSON
+    match serde_json::from_str::<Value>(&response_text) {
+        Ok(json_value) => Ok(json_value),
+        Err(e) => {
+            log::warn!("Failed to parse JSON response, returning raw text: {}", e);
+            // If parsing fails, just wrap the text in a JSON value
+            Ok(json!({ "status": response_text }))
+        }
+    }
 }
 
 // Send WoL to a MAC address directly (from dropdown selection)

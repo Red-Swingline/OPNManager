@@ -36,10 +36,26 @@
     isExpanded = !isExpanded;
   }
   
+  let hasPermissionError = false;
+  let connectionError = "";
+  
   async function checkPluginStatus() {
     try {
-      isPluginInstalled = await invoke<boolean>("check_wol_plugin_installed");
-      if (isPluginInstalled) {
+      isLoading = true;
+      hasPermissionError = false;
+      connectionError = "";
+      
+      const result = await invoke<any>("check_wol_plugin_installed");
+      
+      // Handle the new response format with detailed status info
+      isPluginInstalled = result.installed;
+      hasPermissionError = result.permission_error;
+      
+      if (result.error) {
+        connectionError = result.error;
+      }
+      
+      if (isPluginInstalled && !hasPermissionError) {
         await Promise.all([
           loadSavedHosts(),
           loadArpDevices(),
@@ -49,6 +65,13 @@
     } catch (error) {
       console.error("Failed to check WoL plugin status:", error);
       isPluginInstalled = false;
+      hasPermissionError = false;
+      connectionError = String(error);
+      
+      // Only show toast for unexpected errors, not permission issues
+      if (!connectionError.includes("permission")) {
+        toasts.error(`Connection error: ${connectionError}`);
+      }
     } finally {
       isLoading = false;
     }
@@ -97,6 +120,7 @@
       const result = await invoke<any>("wake_device", { uuid });
       
       // Check possible success response formats from OPNsense WoL API
+      // Using form-encoded data with uuid=value, we expect {"status":"OK"}
       if (result === "[]" || // Empty array string response
           Array.isArray(result) && result.length === 0 || // Empty array
           !result || // Empty/null response can also indicate success
@@ -109,14 +133,26 @@
       } else {
         // Try to extract error message from various possible formats
         const errorMsg = result?.error_msg || 
-                         result?.validations?.wake?.uuid?.[0] || 
+                         result?.validations?.wake?.uuid?.[0] ||
+                         result?.message ||
                          "Unknown error";
         console.error("WoL response:", JSON.stringify(result));
         toasts.error(`Failed to wake device: ${errorMsg}`);
       }
     } catch (error) {
       console.error(`Failed to wake device ${description}:`, error);
-      toasts.error(`Failed to wake device: ${error}`);
+      
+      // Provide more specific error messages based on common errors
+      let errorMessage = String(error);
+      if (errorMessage.includes("Could not resolve hostname")) {
+        errorMessage = "Could not connect to your OPNsense router. Please check your network connection.";
+      } else if (errorMessage.includes("Connection refused")) {
+        errorMessage = "Connection refused by OPNsense. Check that the API service is running.";
+      } else if (errorMessage.includes("401") || errorMessage.includes("Authentication failed")) {
+        errorMessage = "Authentication failed. Check your API key and secret.";
+      }
+      
+      toasts.error(`Failed to wake device: ${errorMessage}`);
     } finally {
       isWaking = false;
     }
@@ -246,6 +282,30 @@
     {#if isLoading}
       <div class="flex justify-center items-center h-24">
         <span class="loading loading-spinner loading-md"></span>
+      </div>
+    {:else if hasPermissionError}
+      <div class="text-center py-4">
+        <p class="text-warning font-medium">Wake-on-LAN plugin is installed but has permission issues.</p>
+        
+        <div class="mt-4 flex flex-col items-center gap-3">
+          <div class="text-sm max-w-xs">
+            Your API key doesn't have sufficient permissions to access the WoL plugin:
+          </div>
+          
+          <ol class="text-xs opacity-80 text-left list-decimal list-inside mt-2">
+            <li>Log in to your OPNsense web interface</li>
+            <li>Navigate to System → Access → Users</li>
+            <li>Edit your API user and ensure it has access to the "Wake on LAN" module</li>
+            <li>Save changes and refresh this page</li>
+          </ol>
+          
+          <button 
+            class="btn btn-outline btn-sm mt-2"
+            on:click={checkPluginStatus}
+          >
+            Check Again
+          </button>
+        </div>
       </div>
     {:else if !isPluginInstalled}
       <div class="text-center py-4">
