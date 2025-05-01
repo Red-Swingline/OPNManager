@@ -13,6 +13,7 @@
     mdiClose,
     mdiDelete,
     mdiPencil,
+    mdiFilterMenu,
   } from "@mdi/js";
 
   interface FirewallRule {
@@ -20,7 +21,26 @@
     enabled: string;
     sequence: string;
     description: string;
+    interface?: string;
     isToggling?: boolean;
+  }
+
+  interface InterfaceItem {
+    value: string;
+    label: string;
+    selected: boolean;
+  }
+
+  interface InterfaceGroup {
+    label: string;
+    icon: string;
+    items: InterfaceItem[];
+  }
+
+  interface InterfaceListResponse {
+    floating: InterfaceGroup;
+    groups: InterfaceGroup;
+    interfaces: InterfaceGroup;
   }
 
   let rules: FirewallRule[] = [];
@@ -34,8 +54,18 @@
   let editRuleUuid = "";
   const REFRESH_INTERVAL = 30000; // 30 seconds
 
+  // For interface filtering
+  let isV2Api = false;
+  let interfaces: InterfaceListResponse | null = null;
+  let loadingInterfaces = false;
+  let selectedInterface = "";
+  let showInterfaceSelector = false;
+  let interfaceRuleCount: Record<string, number> = {};
+
   onMount(async () => {
     if ($authStore.isLoggedIn) {
+      // Check which API version we're using
+      await checkApiVersion();
       await fetchRules();
       startPeriodicRefresh();
     }
@@ -44,6 +74,109 @@
   onDestroy(() => {
     stopPeriodicRefresh();
   });
+
+  async function checkApiVersion() {
+    try {
+      isV2Api = await invoke<boolean>("check_api_version");
+      if (isV2Api) {
+        await loadInterfaceList();
+        if (Object.keys(interfaceRuleCount).length > 0) {
+          // Auto-select the first interface with rules
+          selectFirstInterfaceWithRules();
+        }
+      }
+    } catch (err) {
+      console.error("Failed to check API version:", err);
+      isV2Api = false;
+    }
+  }
+
+  async function loadInterfaceList() {
+    if (!isV2Api) return;
+    
+    loadingInterfaces = true;
+    try {
+      interfaces = await invoke<InterfaceListResponse>("get_interface_list");
+      
+      // Prefetch rules for each interface to find which ones have rules
+      await prefetchInterfaceRules();
+    } catch (err) {
+      console.error("Failed to load interface list:", err);
+      toasts.error("Failed to load interfaces");
+    } finally {
+      loadingInterfaces = false;
+    }
+  }
+  
+  async function prefetchInterfaceRules() {
+    if (!interfaces) return;
+    
+    interfaceRuleCount = {};
+    
+    // First check for rules with no interface (floating)
+    try {
+      const floatingResponse = await invoke<{ rows: FirewallRule[] }>(
+        "get_firewall_rules",
+        { interface: "" }
+      );
+      
+      if (floatingResponse.rows.length > 0) {
+        interfaceRuleCount[""] = floatingResponse.rows.length;
+      }
+    } catch (err) {
+      console.error("Failed to prefetch floating rules:", err);
+    }
+    
+    // Check each interface
+    const allInterfaces = [
+      ...interfaces.floating.items,
+      ...interfaces.groups.items,
+      ...interfaces.interfaces.items
+    ];
+    
+    for (const iface of allInterfaces) {
+      if (iface.value === "") continue; // Skip empty value, we already checked it
+      
+      try {
+        const response = await invoke<{ rows: FirewallRule[] }>(
+          "get_firewall_rules",
+          { interface: iface.value }
+        );
+        
+        if (response.rows.length > 0) {
+          interfaceRuleCount[iface.value] = response.rows.length;
+        }
+      } catch (err) {
+        console.error(`Failed to prefetch rules for interface ${iface.value}:`, err);
+      }
+    }
+    
+    console.log("Interface rule counts:", interfaceRuleCount);
+  }
+  
+  function selectFirstInterfaceWithRules() {
+    const interfacesWithRules = Object.keys(interfaceRuleCount);
+    
+    if (interfacesWithRules.length > 0) {
+      // Prioritize real interfaces over groups or floating
+      const regularInterfaces = interfaces?.interfaces.items
+        .map(i => i.value)
+        .filter(val => interfaceRuleCount[val] > 0);
+      
+      if (regularInterfaces && regularInterfaces.length > 0) {
+        selectedInterface = regularInterfaces[0];
+      } else if (interfacesWithRules.includes("")) {
+        // Next, try floating rules
+        selectedInterface = "";
+      } else {
+        // Finally, use whatever has rules
+        selectedInterface = interfacesWithRules[0];
+      }
+      
+      console.log(`Auto-selected interface: ${selectedInterface} with ${interfaceRuleCount[selectedInterface]} rules`);
+      fetchRules();
+    }
+  }
 
   function startPeriodicRefresh() {
     refreshInterval = setInterval(updateRules, REFRESH_INTERVAL);
@@ -61,6 +194,7 @@
     try {
       const response = await invoke<{ rows: FirewallRule[] }>(
         "get_firewall_rules",
+        { interface: selectedInterface }
       );
       rules = response.rows;
     } catch (err) {
@@ -104,6 +238,7 @@
     try {
       const response = await invoke<{ rows: FirewallRule[] }>(
         "get_firewall_rules",
+        { interface: selectedInterface }
       );
       const newRules = response.rows;
 
@@ -140,12 +275,54 @@
     showEditRuleModal = true;
   }
 
-  function handleRuleAdded() {
-    fetchRules();
+  async function handleRuleAdded() {
+    // Fetch rules for current interface
+    await fetchRules();
+    
+    // If we're using the V2 API, update the interface rule counts
+    if (isV2Api && interfaces) {
+      // Update the rule count for the current interface
+      const updateCurrentInterfaceCount = async () => {
+        try {
+          const response = await invoke<{ rows: FirewallRule[] }>(
+            "get_firewall_rules",
+            { interface: selectedInterface }
+          );
+          
+          interfaceRuleCount[selectedInterface] = response.rows.length;
+        } catch (err) {
+          console.error("Failed to update interface rule count:", err);
+        }
+      };
+      
+      // If a rule was added to a new interface, refresh all interface counts
+      if (!interfaceRuleCount[selectedInterface]) {
+        await prefetchInterfaceRules();
+      } else {
+        await updateCurrentInterfaceCount();
+      }
+    }
   }
 
-  function handleRuleEdited() {
-    fetchRules();
+  async function handleRuleEdited() {
+    // Save the current interface to restore it later if needed
+    const currentInterface = selectedInterface;
+    
+    // Fetch rules for current interface
+    await fetchRules();
+    
+    // If we're using the V2 API, update the interface rule counts
+    // (rule edits might change interface assignments)
+    if (isV2Api && interfaces) {
+      await prefetchInterfaceRules();
+      
+      // Check if we need to switch interfaces
+      // (in case the edited rule changed interfaces and there are no more rules on the current interface)
+      if (rules.length === 0 && Object.keys(interfaceRuleCount).length > 0) {
+        // Switch to an interface that has rules
+        selectFirstInterfaceWithRules();
+      }
+    }
   }
 
   function openDeleteConfirmation(rule: FirewallRule) {
@@ -164,7 +341,15 @@
     try {
       await invoke("delete_firewall_rule", { uuid: selectedRule.uuid });
       await invoke("apply_firewall_changes");
+      
+      // Fetch updated rules for current interface
       await fetchRules();
+      
+      // If we're using the V2 API, update the interface rule counts
+      if (isV2Api && interfaces) {
+        await prefetchInterfaceRules();
+      }
+      
       toasts.success("Rule deleted successfully");
       closeDeleteConfirmation();
     } catch (error) {
@@ -172,20 +357,195 @@
       toasts.error(`Failed to delete rule: ${error}`);
     }
   }
+
+  function selectInterface(interfaceValue: string) {
+    selectedInterface = interfaceValue;
+    showInterfaceSelector = false;
+    fetchRules();
+  }
+
+  function toggleInterfaceSelector() {
+    showInterfaceSelector = !showInterfaceSelector;
+    
+    if (showInterfaceSelector) {
+      // Add click outside listener
+      setTimeout(() => {
+        const clickOutsideHandler = (event) => {
+          const dropdown = document.querySelector('.interface-dropdown');
+          const button = document.querySelector('.interface-selector-button');
+          
+          if (dropdown && button && 
+              !dropdown.contains(event.target) && 
+              !button.contains(event.target)) {
+            showInterfaceSelector = false;
+            window.removeEventListener('click', clickOutsideHandler);
+          }
+        };
+        
+        window.addEventListener('click', clickOutsideHandler);
+      }, 0);
+    }
+  }
+
+  function getInterfaceDisplayName(value: string): string {
+    if (!interfaces) return value;
+    
+    // First check floating
+    const floatingItem = interfaces.floating.items.find(i => i.value === value);
+    if (floatingItem) return floatingItem.label;
+
+    // Then check groups
+    const groupItem = interfaces.groups.items.find(i => i.value === value);
+    if (groupItem) return groupItem.label;
+
+    // Finally check interfaces
+    const interfaceItem = interfaces.interfaces.items.find(i => i.value === value);
+    if (interfaceItem) return interfaceItem.label;
+
+    return value || "All Interfaces";
+  }
 </script>
 
 <AppLayout>
   <div class="max-w-6xl mx-auto">
-    <div class="flex justify-between items-center mb-6">
+    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
       <h2 class="text-2xl font-bold">Firewall Rules</h2>
+      
+      <div class="flex flex-1 sm:flex-none items-center gap-2 justify-between sm:justify-end">
+        {#if isV2Api && interfaces}
+          <!-- Interface Selector -->
+          <div class="relative flex-1 sm:flex-none">
+            <button 
+              class="btn btn-sm interface-selector-button {selectedInterface ? 'btn-primary text-primary-content' : 'btn-outline'} flex items-center gap-2 w-full sm:w-auto justify-between" 
+              on:click={toggleInterfaceSelector}
+              title="Filter by Interface"
+            >
+              <div class="flex items-center gap-1">
+                <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
+                  <path fill="currentColor" d={mdiFilterMenu} />
+                </svg>
+                <span class="max-w-[120px] truncate">
+                  {selectedInterface ? getInterfaceDisplayName(selectedInterface) : "All Interfaces"}
+                </span>
+              </div>
+              <div class="flex items-center gap-1">
+                {#if interfaceRuleCount[selectedInterface || '']}
+                  <span class="badge badge-sm badge-outline bg-white/30">
+                    {interfaceRuleCount[selectedInterface || '']}
+                  </span>
+                {/if}
+                <svg class="w-3 h-3 opacity-70 flex-shrink-0" viewBox="0 0 24 24">
+                  <path fill="currentColor" d="M7,10L12,15L17,10H7Z" />
+                </svg>
+              </div>
+            </button>
+            
+            {#if showInterfaceSelector}
+              <div class="absolute interface-dropdown z-50 mt-1 w-full sm:w-72 left-0 right-0 sm:left-auto sm:right-auto bg-base-100 shadow-xl rounded-md overflow-hidden border border-base-300">
+                <div class="p-3 bg-base-200 border-b border-base-300">
+                  <h4 class="font-medium">Filter by Interface</h4>
+                </div>
+                <div class="max-h-80 overflow-y-auto py-2">
+                  <!-- All interfaces option -->
+                  <div class="px-3 mb-1">
+                    <button 
+                      class="w-full text-left px-3 py-2 hover:bg-base-200 rounded-md {selectedInterface === '' ? 'bg-primary/10 text-primary border border-primary/20' : 'hover:bg-base-200'} {!interfaceRuleCount[''] ? 'opacity-60' : ''}"
+                      on:click={() => selectInterface('')}
+                    >
+                      <div class="flex justify-between items-center">
+                        <span class="font-medium">All Interfaces</span>
+                        {#if interfaceRuleCount['']}
+                          <span class="badge badge-sm badge-primary">{interfaceRuleCount['']}</span>
+                        {/if}
+                      </div>
+                    </button>
+                  </div>
+                  
+                  <!-- Floating -->
+                  <div class="mt-3 mb-2">
+                    <div class="px-3 py-1.5 bg-base-200 border-y border-base-300 flex items-center gap-2">
+                      <div class="w-1 h-5 bg-primary rounded-full opacity-60"></div>
+                      <span class="text-sm font-medium">{interfaces.floating.label}</span>
+                    </div>
+                    <div class="mt-1 px-3">
+                      {#each interfaces.floating.items as item}
+                        <button 
+                          class="w-full text-left px-3 py-2 hover:bg-base-200 rounded-md mb-1 {selectedInterface === item.value ? 'bg-primary/10 text-primary border border-primary/20' : ''} {!interfaceRuleCount[item.value] ? 'opacity-60' : ''}"
+                          on:click={() => selectInterface(item.value)}
+                        >
+                          <div class="flex justify-between items-center">
+                            <span>{item.label}</span>
+                            {#if interfaceRuleCount[item.value]}
+                              <span class="badge badge-sm badge-primary">{interfaceRuleCount[item.value]}</span>
+                            {/if}
+                          </div>
+                        </button>
+                      {/each}
+                    </div>
+                  </div>
+                  
+                  <!-- Groups -->
+                  {#if interfaces.groups.items.length > 0}
+                    <div class="mb-2">
+                      <div class="px-3 py-1.5 bg-base-200 border-y border-base-300 flex items-center gap-2">
+                        <div class="w-1 h-5 bg-warning rounded-full opacity-60"></div>
+                        <span class="text-sm font-medium">{interfaces.groups.label}</span>
+                      </div>
+                      <div class="mt-1 px-3">
+                        {#each interfaces.groups.items as item}
+                          <button 
+                            class="w-full text-left px-3 py-2 hover:bg-base-200 rounded-md mb-1 {selectedInterface === item.value ? 'bg-primary/10 text-primary border border-primary/20' : ''} {!interfaceRuleCount[item.value] ? 'opacity-60' : ''}"
+                            on:click={() => selectInterface(item.value)}
+                          >
+                            <div class="flex justify-between items-center">
+                              <span>{item.label}</span>
+                              {#if interfaceRuleCount[item.value]}
+                                <span class="badge badge-sm badge-primary">{interfaceRuleCount[item.value]}</span>
+                              {/if}
+                            </div>
+                          </button>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+                  
+                  <!-- Interfaces -->
+                  <div>
+                    <div class="px-3 py-1.5 bg-base-200 border-y border-base-300 flex items-center gap-2">
+                      <div class="w-1 h-5 bg-info rounded-full opacity-60"></div>
+                      <span class="text-sm font-medium">{interfaces.interfaces.label}</span>
+                    </div>
+                    <div class="mt-1 px-3">
+                      {#each interfaces.interfaces.items as item}
+                        <button 
+                          class="w-full text-left px-3 py-2 hover:bg-base-200 rounded-md mb-1 {selectedInterface === item.value ? 'bg-primary/10 text-primary border border-primary/20' : ''} {!interfaceRuleCount[item.value] ? 'opacity-60' : ''}"
+                          on:click={() => selectInterface(item.value)}
+                        >
+                          <div class="flex justify-between items-center">
+                            <span>{item.label}</span>
+                            {#if interfaceRuleCount[item.value]}
+                              <span class="badge badge-sm badge-primary">{interfaceRuleCount[item.value]}</span>
+                            {/if}
+                          </div>
+                        </button>
+                      {/each}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/if}
 
-      <!-- Add Rule Button -->
-      <button class="btn btn-primary" on:click={openAddRuleModal}>
-        <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24">
-          <path fill="currentColor" d={mdiPlus} />
-        </svg>
-        Add Rule
-      </button>
+        <!-- Add Rule Button -->
+        <button class="btn btn-primary sm:ml-2" on:click={openAddRuleModal}>
+          <svg class="w-5 h-5 mr-1" viewBox="0 0 24 24">
+            <path fill="currentColor" d={mdiPlus} />
+          </svg>
+          <span class="hidden xs:inline">Add Rule</span>
+          <span class="xs:hidden">Add</span>
+        </button>
+      </div>
     </div>
 
     {#if isLoading}
@@ -198,63 +558,98 @@
     {:else if rules.length === 0}
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
-          <h3 class="card-title text-lg">No Automation Rules Found</h3>
+          <h3 class="card-title text-lg">
+            {#if isV2Api && selectedInterface}
+              No Rules Found for {getInterfaceDisplayName(selectedInterface)}
+            {:else}
+              No Automation Rules Found
+            {/if}
+          </h3>
           <div class="divider my-2"></div>
 
           <div class="space-y-4">
-            <p>
-              Your rules list is empty because OPNsense only exposes <strong
-                >Automation Rules</strong
-              > through its API, not the regular interface firewall rules.
-            </p>
+            {#if isV2Api && selectedInterface}
+              <p>
+                There are no firewall rules defined for the selected interface.
+              </p>
+              
+              {#if Object.keys(interfaceRuleCount).length > 0}
+                <div class="alert alert-info shadow-lg">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    class="stroke-current shrink-0 w-6 h-6"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    ></path>
+                  </svg>
+                  <div>
+                    <span class="font-medium">Try selecting a different interface</span> from the dropdown above. Some interfaces have rules.
+                  </div>
+                </div>
+              {:else}
+                <p>You can create rules for this interface by clicking the "Add Rule" button.</p>
+              {/if}
+            {:else}
+              <p>
+                Your rules list is empty because OPNsense only exposes <strong
+                  >Automation Rules</strong
+                > through its API, not the regular interface firewall rules.
+              </p>
 
-            <div class="alert alert-info shadow-lg">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                class="stroke-current shrink-0 w-6 h-6"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                ></path>
-              </svg>
-              <div>
-                <span class="font-medium"
-                  >This is not an error with the application.</span
-                > This is a limitation of the OPNsense API.
+              <div class="alert alert-info shadow-lg">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  class="stroke-current shrink-0 w-6 h-6"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  ></path>
+                </svg>
+                <div>
+                  <span class="font-medium"
+                    >This is not an error with the application.</span
+                  > This is a limitation of the OPNsense API.
+                </div>
               </div>
-            </div>
 
-            <h4 class="font-medium text-md">What you need to know:</h4>
-            <ul class="list-disc pl-5 space-y-2">
-              <li>
-                OPNsense has two separate rule systems:
-                <ul class="list-circle pl-5 mt-1">
-                  <li>
-                    <strong>Interface Rules</strong> - Created through the UI but
-                    not accessible via API
-                  </li>
-                  <li>
-                    <strong>Automation Rules</strong> - Created specifically for
-                    API access and automation
-                  </li>
-                </ul>
-              </li>
-              <li>
-                Rules created in the OPNsense web interface are not shown here
-              </li>
-              <li>
-                Rules created through this app will appear in the "Automation"
-                section of your OPNsense firewall
-              </li>
-            </ul>
+              <h4 class="font-medium text-md">What you need to know:</h4>
+              <ul class="list-disc pl-5 space-y-2">
+                <li>
+                  OPNsense has two separate rule systems:
+                  <ul class="list-circle pl-5 mt-1">
+                    <li>
+                      <strong>Interface Rules</strong> - Created through the UI but
+                      not accessible via API
+                    </li>
+                    <li>
+                      <strong>Automation Rules</strong> - Created specifically for
+                      API access and automation
+                    </li>
+                  </ul>
+                </li>
+                <li>
+                  Rules created in the OPNsense web interface are not shown here
+                </li>
+                <li>
+                  Rules created through this app will appear in the "Automation"
+                  section of your OPNsense firewall
+                </li>
+              </ul>
+            {/if}
 
             <div class="bg-base-200 p-4 rounded-lg">
-              <h4 class="font-medium">To create your first automation rule:</h4>
+              <h4 class="font-medium">To create your first {isV2Api ? '' : 'automation '}rule:</h4>
               <ol class="list-decimal pl-5 mt-2 space-y-1">
                 <li>Click the "Add Rule" button above</li>
                 <li>Configure your rule settings</li>
@@ -269,74 +664,80 @@
                 rel="noopener noreferrer"
                 class="link link-primary"
               >
-                Learn more about OPNsense Firewall API limitations
+                Learn more about OPNsense Firewall API
               </a>
             </p>
           </div>
         </div>
       </div>
     {:else}
-      <div class="space-y-4">
+      <div>
         {#each rules as rule (rule.uuid)}
-          <div class="card bg-base-100 shadow-xl">
-            <div
-              class="card-body p-4 flex flex-row items-center justify-between"
-            >
-              <div class="flex-1">
-                <div class="flex items-start gap-3">
-                  <div>
-                    <span class="text-sm opacity-70">#{rule.sequence}</span>
-                    <h3 class="text-lg font-medium">
-                      {rule.description || "Unnamed Rule"}
-                    </h3>
-                  </div>
+          <div class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow border-l-4 {rule.enabled === '1' ? 'border-success' : 'border-error'} my-2">
+            <div class="card-body p-3">
+              <!-- Rule Information Row -->
+              <div class="flex justify-between items-center mb-1.5">
+                <div class="flex items-center gap-2">
+                  <span class="badge badge-sm">#{rule.sequence}</span>
+                  {#if rule.interface}
+                    <span class="badge badge-sm badge-outline">
+                      {rule.interface}
+                    </span>
+                  {/if}
                 </div>
+                <span
+                  class="badge badge-sm {rule.enabled === '1'
+                    ? 'badge-success'
+                    : 'badge-error'}"
+                >
+                  {rule.enabled === '1' ? 'Enabled' : 'Disabled'}
+                </span>
               </div>
-              <div class="flex gap-2">
-                <!-- Enable/Disable Button -->
+              
+              <!-- Description -->
+              <h3 class="text-sm sm:text-base font-medium line-clamp-2 mb-2">
+                {rule.description || "Unnamed Rule"}
+              </h3>
+              
+              <!-- Actions Row -->
+              <div class="flex items-center justify-end gap-2 mt-auto">
+                <!-- Toggle Button -->
                 <button
-                  class="btn btn-sm {rule.enabled === '1'
-                    ? 'btn-success'
-                    : 'btn-error'}"
+                  class="btn btn-xs sm:btn-sm {rule.enabled === '1' ? 'btn-success' : 'btn-error'} btn-outline"
                   on:click={() => toggleRule(rule)}
                   disabled={rule.isToggling}
-                  title={rule.enabled === "1"
-                    ? "Rule Enabled (click to disable)"
-                    : "Rule Disabled (click to enable)"}
+                  aria-label={rule.enabled === "1" ? "Disable Rule" : "Enable Rule"}
                 >
                   {#if rule.isToggling}
                     <span class="loading loading-spinner loading-xs"></span>
                   {:else}
-                    <svg class="w-4 h-4 sm:mr-1" viewBox="0 0 24 24">
+                    <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" viewBox="0 0 24 24">
                       <path
                         fill="currentColor"
                         d={rule.enabled === "1" ? mdiCheck : mdiClose}
                       />
                     </svg>
-                    <span class="hidden sm:inline"
-                      >{rule.enabled === "1" ? "Enabled" : "Disabled"}</span
-                    >
                   {/if}
                 </button>
 
                 <!-- Edit Button -->
                 <button
-                  class="btn btn-sm btn-ghost"
+                  class="btn btn-xs sm:btn-sm btn-outline"
                   on:click={() => openEditRuleModal(rule)}
-                  title="Edit Rule"
+                  aria-label="Edit Rule"
                 >
-                  <svg class="w-4 h-4" viewBox="0 0 24 24">
+                  <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" viewBox="0 0 24 24">
                     <path fill="currentColor" d={mdiPencil} />
                   </svg>
                 </button>
 
                 <!-- Delete Button -->
                 <button
-                  class="btn btn-sm btn-ghost text-error"
+                  class="btn btn-xs sm:btn-sm btn-outline btn-error"
                   on:click={() => openDeleteConfirmation(rule)}
-                  title="Delete Rule"
+                  aria-label="Delete Rule"
                 >
-                  <svg class="w-4 h-4" viewBox="0 0 24 24">
+                  <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" viewBox="0 0 24 24">
                     <path fill="currentColor" d={mdiDelete} />
                   </svg>
                 </button>
@@ -365,6 +766,7 @@
   <AddFirewallRuleModal
     bind:showModal={showAddRuleModal}
     on:refresh={handleRuleAdded}
+    selectedInterface={isV2Api ? selectedInterface : undefined}
   />
 
   <!-- Edit Rule Modal -->

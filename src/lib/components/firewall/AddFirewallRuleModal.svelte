@@ -5,6 +5,7 @@
   import { mdiClose } from '@mdi/js';
 
   export let showModal = false;
+  export let selectedInterface: string | undefined = undefined;
 
   const dispatch = createEventDispatcher();
   
@@ -101,6 +102,11 @@
         value: option.value,
         selected: option.selected === 1
       }));
+      
+      // If we have a selectedInterface from the parent component, use it
+      if (selectedInterface) {
+        ruleData.interface = selectedInterface;
+      }
     }
 
     if (ruleTemplate.rule.action) {
@@ -159,7 +165,7 @@
       sequence: "1",
       action: "pass",
       quick: "1",
-      interface: "",
+      interface: selectedInterface || "",
       direction: "in",
       ipprotocol: "inet",
       protocol: "any",

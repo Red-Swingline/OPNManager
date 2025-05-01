@@ -11,6 +11,8 @@ pub struct FirewallRule {
     enabled: String,
     sequence: String,
     description: String,
+    #[serde(default)]
+    interface: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -37,7 +39,6 @@ pub struct ApplyResponse {
 pub struct AddRuleResponse {
     result: String,
     uuid: Option<String>,
-    // Include additional fields that may be in the response
     #[serde(skip_serializing_if = "Option::is_none")]
     status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -56,27 +57,113 @@ pub struct AliasOrNetwork {
     pub items: HashMap<String, String>,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct InterfaceGroup {
+    pub label: String,
+    pub icon: String,
+    pub items: Vec<InterfaceItem>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct InterfaceItem {
+    pub value: String,
+    pub label: String,
+    #[serde(default)]
+    pub selected: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct InterfaceListResponse {
+    pub floating: InterfaceGroup,
+    pub groups: InterfaceGroup,
+    pub interfaces: InterfaceGroup,
+}
+
 fn build_api_url(api_info: &crate::db::ApiInfo, endpoint: &str) -> String {
     format!("{}:{}{}", api_info.api_url, api_info.port, endpoint)
 }
 
 #[tauri::command]
+pub async fn get_interface_list(
+    database: State<'_, Database>,
+) -> Result<InterfaceListResponse, String> {
+    let api_info = database
+        .get_default_api_info()
+        .map_err(|e| format!("Failed to get API info: {}", e))?
+        .ok_or_else(|| "API info not found".to_string())?;
+
+    let url = build_api_url(&api_info, "/api/firewall/filter/get_interface_list");
+
+    let response = make_http_request(
+        "GET",
+        &url,
+        None,
+        None,
+        Some(30),
+        Some(&api_info.api_key),
+        Some(&api_info.api_secret),
+    )
+    .await?;
+
+    response
+        .json::<InterfaceListResponse>()
+        .await
+        .map_err(|e| format!("Failed to parse interface list response: {}", e))
+}
+
+#[tauri::command]
+pub async fn check_api_version(
+    database: State<'_, Database>,
+) -> Result<bool, String> {
+    let api_info = database
+        .get_default_api_info()
+        .map_err(|e| format!("Failed to get API info: {}", e))?
+        .ok_or_else(|| "API info not found".to_string())?;
+    
+    let url = build_api_url(&api_info, "/api/firewall/filter/get_interface_list");
+    
+    let response = make_http_request(
+        "GET",
+        &url,
+        None,
+        None,
+        Some(10), 
+        Some(&api_info.api_key),
+        Some(&api_info.api_secret),
+    ).await;
+ 
+    Ok(response.is_ok())
+}
+
+#[tauri::command]
 pub async fn get_firewall_rules(
     database: State<'_, Database>,
+    interface: Option<String>,
 ) -> Result<FirewallRulesResponse, String> {
     let api_info = database
         .get_default_api_info()
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
-    let url = build_api_url(&api_info, "/api/firewall/filter/searchRule");
+    let is_new_api = check_api_version(database.clone()).await.unwrap_or(false);
 
-    let payload = serde_json::json!({
+    let url = build_api_url(&api_info, "/api/firewall/filter/search_rule");
+
+    let mut payload = serde_json::json!({
         "current": 1,
         "rowCount": -1,
         "sort": {},
         "searchPhrase": ""
     });
+
+    if let Some(iface) = interface {
+        if !iface.is_empty() {
+            payload["interface"] = serde_json::Value::String(iface);
+        }
+    }
+    
+    println!("Getting firewall rules from URL: {}", url);
+    println!("With payload: {}", serde_json::to_string_pretty(&payload).unwrap_or_default());
 
     let response = make_http_request(
         "POST",
@@ -204,30 +291,24 @@ pub async fn add_firewall_rule(
     )
     .await?;
 
-    // First try to parse as AddRuleResponse
     let response_text = response
         .text()
         .await
         .map_err(|e| format!("Failed to read response body: {}", e))?;
 
-    // Log the raw response for debugging
     println!("Raw add rule response: {}", response_text);
 
-    // Try to parse as AddRuleResponse
     let add_result = match serde_json::from_str::<AddRuleResponse>(&response_text) {
         Ok(result) => result,
         Err(e) => {
-            // If parsing fails, try to parse as a generic JSON value
             match serde_json::from_str::<serde_json::Value>(&response_text) {
                 Ok(value) => {
-                    // Try to extract result field
                     let result = value
                         .get("result")
                         .and_then(|v| v.as_str())
                         .unwrap_or("error")
                         .to_string();
 
-                    // Create a default response
                     AddRuleResponse {
                         result,
                         uuid: None,
@@ -236,14 +317,12 @@ pub async fn add_firewall_rule(
                     }
                 }
                 Err(_) => {
-                    // If all parsing fails, return a meaningful error
                     return Err(format!("Failed to parse API response: {}", response_text));
                 }
             }
         }
     };
 
-    // Apply changes only if the result was successful
     if add_result.result == "saved" {
         apply_firewall_changes(database).await?;
     }
@@ -342,12 +421,18 @@ pub async fn get_rule(
         Some(&api_info.api_key),
         Some(&api_info.api_secret),
     )
-    .await?;
+    .await;
 
-    response
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e| format!("Failed to parse response: {}", e))
+    match response {
+        Ok(resp) => {
+            resp.json::<serde_json::Value>()
+                .await
+                .map_err(|e| format!("Failed to parse response: {}", e))
+        },
+        Err(e) => {
+            Err(format!("Failed to get rule: {}", e))
+        }
+    }
 }
 
 #[tauri::command]
@@ -361,15 +446,32 @@ pub async fn set_rule(
         .map_err(|e| format!("Failed to get API info: {}", e))?
         .ok_or_else(|| "API info not found".to_string())?;
 
+    let is_new_api = check_api_version(database.clone()).await.unwrap_or(false);
+
     let url = build_api_url(
         &api_info,
         &format!("/api/firewall/filter/set_rule/{}", uuid),
     );
 
+    let actual_payload = match rule_data {
+        serde_json::Value::Object(ref map) => {
+            if map.contains_key("rule") {
+                rule_data.clone()
+            } else {
+                serde_json::json!({ "rule": map })
+            }
+        },
+        _ => serde_json::json!({ "rule": rule_data }) 
+    };
+
+    println!("Setting rule {} with URL: {}", uuid, url);
+    println!("Raw payload: {}", serde_json::to_string_pretty(&rule_data).unwrap_or_default());
+    println!("Actual payload sent: {}", serde_json::to_string_pretty(&actual_payload).unwrap_or_default());
+
     let response = make_http_request(
         "POST",
         &url,
-        Some(rule_data),
+        Some(actual_payload),
         None,
         Some(30),
         Some(&api_info.api_key),
@@ -377,12 +479,25 @@ pub async fn set_rule(
     )
     .await?;
 
-    let result = response
-        .json::<serde_json::Value>()
+    let response_text = response
+        .text()
         .await
-        .map_err(|e| format!("Failed to parse set rule response: {}", e))?;
+        .map_err(|e| format!("Failed to read response body: {}", e))?;
 
-    apply_firewall_changes(database).await?;
+    println!("Set rule response: {}", response_text);
+
+    let result = match serde_json::from_str::<serde_json::Value>(&response_text) {
+        Ok(value) => value,
+        Err(e) => {
+            return Err(format!("Failed to parse set rule response as JSON: {}. Raw response: {}", e, response_text));
+        }
+    };
+
+    if let Some(result_field) = result.get("result") {
+        if result_field.as_str() == Some("saved") {
+            apply_firewall_changes(database).await?;
+        }
+    }
 
     Ok(result)
 }

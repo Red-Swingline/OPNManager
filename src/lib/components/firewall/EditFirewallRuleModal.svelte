@@ -14,6 +14,7 @@
     let ruleTemplate = null;
     let networkSelectOptions = null;
     let currentRule = null;
+    let isNewApiVersion = false; // Flag to indicate if we're using the newer v25+ API
     
     // Rule data structure matching OPNsense format
     let ruleData = {
@@ -64,6 +65,9 @@
     async function loadData() {
       isLoading = true;
       try {
+        // First, check the API version
+        isNewApiVersion = await invoke('check_api_version');
+        
         // Load data in parallel for efficiency
         const [ruleTemplateResult, networkSelectOptionsResult, currentRuleResult] = await Promise.all([
           invoke('get_rule_template'),
@@ -74,6 +78,8 @@
         ruleTemplate = ruleTemplateResult;
         networkSelectOptions = networkSelectOptionsResult;
         currentRule = currentRuleResult;
+        
+        console.log("API Version:", isNewApiVersion ? "v25+" : "v24");
         
         // Parse network options
         if (networkSelectOptions?.aliases?.items) {
@@ -116,12 +122,30 @@
         }));
       }
   
+      // Include all protocols from the template without filtering
       if (ruleTemplate.rule.protocol) {
         protocols = Object.entries(ruleTemplate.rule.protocol).map(([key, option]) => ({
           key,
           value: option.value,
           selected: option.selected === 1
         }));
+        
+        // Make sure we at least have the 'any' protocol
+        if (!protocols.some(p => p.key.toLowerCase() === 'any')) {
+          protocols.unshift({
+            key: 'any',
+            value: 'Any',
+            selected: false
+          });
+        }
+      } else {
+        // Default protocols if none were provided
+        protocols = [
+          { key: 'any', value: 'Any', selected: true },
+          { key: 'tcp', value: 'TCP', selected: false },
+          { key: 'udp', value: 'UDP', selected: false },
+          { key: 'icmp', value: 'ICMP', selected: false }
+        ];
       }
   
       if (ruleTemplate.rule.direction) {
@@ -158,8 +182,22 @@
       let sourceType = 'network';
       let destType = 'network';
       
-      // Check if source is an alias
-      if (aliasOptions && Object.keys(aliasOptions).includes(rule.source_net)) {
+      // Check if source contains commas, indicating multiple values
+      if (rule.source_net && rule.source_net.includes(',')) {
+        // Multiple values - check the first one to determine type
+        const sourceValues = rule.source_net.split(',');
+        
+        // Check if these are aliases
+        if (aliasOptions && sourceValues.every(val => Object.keys(aliasOptions).includes(val))) {
+          sourceType = 'alias';
+        } 
+        // Otherwise assume they're networks
+        else {
+          sourceType = 'network';
+        }
+      }
+      // Check if single source is an alias
+      else if (aliasOptions && rule.source_net && Object.keys(aliasOptions).includes(rule.source_net)) {
         sourceType = 'alias';
       } 
       // Check if source is likely to be a single host (has /32 or is an IP without subnet)
@@ -167,8 +205,22 @@
         sourceType = 'host';
       }
       
-      // Check if destination is an alias
-      if (aliasOptions && Object.keys(aliasOptions).includes(rule.destination_net)) {
+      // Check if destination contains commas, indicating multiple values
+      if (rule.destination_net && rule.destination_net.includes(',')) {
+        // Multiple values - check the first one to determine type
+        const destValues = rule.destination_net.split(',');
+        
+        // Check if these are aliases
+        if (aliasOptions && destValues.every(val => Object.keys(aliasOptions).includes(val))) {
+          destType = 'alias';
+        } 
+        // Otherwise assume they're networks
+        else {
+          destType = 'network';
+        }
+      }
+      // Check if single destination is an alias
+      else if (aliasOptions && rule.destination_net && Object.keys(aliasOptions).includes(rule.destination_net)) {
         destType = 'alias';
       } 
       // Check if destination is likely to be a single host
@@ -177,6 +229,40 @@
       }
       
       // Populate the form data
+      // Extract the protocol value - preserve the original value
+      let protocolValue = "any";
+      try {
+        if (rule.protocol) {
+          // Extract the protocol value and keep it exactly as is
+          protocolValue = Object.keys(rule.protocol).find(key => rule.protocol[key].selected === 1) || "any";
+          console.log(`Found protocol: ${protocolValue}`);
+        }
+      } catch (error) {
+        console.error("Error parsing protocol:", error);
+        protocolValue = "any";
+      }
+      
+      // Make sure categories is loaded in the correct format (array)
+      const categoriesValue = Array.isArray(rule.categories) ? rule.categories : [];
+      
+      // Handle source and destination values - they could be comma-separated strings
+      // For multi-select to work, we need to convert to arrays
+      let sourceNetValue = rule.source_net || "any";
+      let destNetValue = rule.destination_net || "any";
+      
+      // If these are comma-separated strings, convert to arrays for the multi-select
+      if (sourceType === 'alias' || sourceType === 'network') {
+        if (typeof sourceNetValue === 'string' && sourceNetValue.includes(',')) {
+          sourceNetValue = sourceNetValue.split(',');
+        }
+      }
+      
+      if (destType === 'alias' || destType === 'network') {
+        if (typeof destNetValue === 'string' && destNetValue.includes(',')) {
+          destNetValue = destNetValue.split(',');
+        }
+      }
+      
       ruleData = {
         enabled: rule.enabled || "1",
         sequence: rule.sequence || "1",
@@ -185,18 +271,18 @@
         interface: Object.keys(rule.interface || {}).find(key => rule.interface[key].selected === 1) || "",
         direction: Object.keys(rule.direction || {}).find(key => rule.direction[key].selected === 1) || "in",
         ipprotocol: Object.keys(rule.ipprotocol || {}).find(key => rule.ipprotocol[key].selected === 1) || "inet",
-        protocol: Object.keys(rule.protocol || {}).find(key => rule.protocol[key].selected === 1) || "any",
+        protocol: protocolValue,
         source_type: sourceType,
-        source_net: rule.source_net || "any",
+        source_net: sourceNetValue,
         source_not: rule.source_not || "0",
         source_port: rule.source_port || "",
         destination_type: destType,
-        destination_net: rule.destination_net || "any",
+        destination_net: destNetValue,
         destination_not: rule.destination_not || "0",
         destination_port: rule.destination_port || "",
         gateway: Object.keys(rule.gateway || {}).find(key => rule.gateway[key].selected === 1) || "",
         log: rule.log || "0",
-        categories: rule.categories || "",
+        categories: categoriesValue,
         description: rule.description || ""
       };
     }
@@ -234,26 +320,195 @@
     }
   
     async function handleSubmit() {
-      // Don't require interface - if left blank, it means "any interface"
-      // (removed the interface validation check that was here)
-
       isSubmitting = true;
       
       try {
-        // Clean up the data being sent - remove any UI-specific fields
-        const cleanedRuleData = {...ruleData};
+        // Get current interface and protocol from the rule
+        let currentInterface = "";
+        let currentProtocol = "";
         
-        // Remove UI-specific fields
+        if (currentRule && currentRule.rule) {
+          // Extract interface
+          if (currentRule.rule.interface) {
+            for (const [key, val] of Object.entries(currentRule.rule.interface)) {
+              if (val.selected === 1) {
+                currentInterface = key;
+                break;
+              }
+            }
+          }
+          
+          // Extract protocol
+          if (currentRule.rule.protocol) {
+            for (const [key, val] of Object.entries(currentRule.rule.protocol)) {
+              if (val.selected === 1) {
+                currentProtocol = key;
+                break;
+              }
+            }
+          }
+        }
+        
+        // We need to use the updated values from the form while keeping the format right
+        // First, we need the original rule to get the format right
+        if (!currentRule || !currentRule.rule) {
+          throw new Error("Original rule data not available");
+        }
+        
+        // Extract the original rule for reference
+        const originalRule = currentRule.rule;
+        
+        // Remove UI-specific fields from ruleData
+        const cleanedRuleData = {...ruleData};
         delete cleanedRuleData.source_type;
         delete cleanedRuleData.destination_type;
         
-        // If interface is empty, it's treated as "any interface" in OPNsense
-        if (!cleanedRuleData.interface) {
-          cleanedRuleData.interface = "";
+        // Ensure boolean-like values are strings "0" or "1"
+        Object.keys(cleanedRuleData).forEach(key => {
+          if (key === "enabled" || key === "quick" || key === "log" || 
+              key === "source_not" || key === "destination_not") {
+            cleanedRuleData[key] = cleanedRuleData[key] ? "1" : "0";
+          }
+          
+          // Ensure sequence is a string
+          if (key === "sequence" && typeof cleanedRuleData[key] !== "string") {
+            cleanedRuleData[key] = String(cleanedRuleData[key]);
+          }
+        });
+        
+        // Create a baseline payload from the working curl format
+        // We need to capture all fields from the form while maintaining the working structure
+        const basePayload = {
+          enabled: "1",
+          sequence: "1",
+          categories: "",
+          nosync: "0",
+          description: "",
+          interfacenot: "0",
+          interface: "opt3",
+          quick: "1",
+          action: "pass",
+          allowopts: "0",
+          direction: "in",
+          ipprotocol: "inet",
+          protocol: "VISA",
+          source_not: "0",
+          source_net: "any",
+          source_port: "",
+          destination_not: "0",
+          destination_net: "any",
+          destination_port: "",
+          log: "0",
+          tcpflags1: "",
+          tcpflags2: "",
+          sched: "",
+          statetype: "keep", // The key fix - always use "keep" not "keep state"
+          "state-policy": "",
+          statetimeout: "",
+          adaptivestart: "",
+          adaptiveend: "",
+          max: "",
+          "max-src-nodes": "",
+          "max-src-states": "",
+          "max-src-conn": "",
+          "max-src-conn-rate": "",
+          "max-src-conn-rates": "",
+          overload: "",
+          nopfsync: "0", 
+          shaper1: "",
+          shaper2: "",
+          gateway: "",
+          disablereplyto: "0",
+          replyto: "",
+          prio: "",
+          "set-prio": "",
+          "set-prio-low": "",
+          tos: "",
+          tag: "",
+          tagged: ""
+        };
+        
+        // Handle source_net and destination_net which could be arrays for multi-select
+        let sourceNet = cleanedRuleData.source_net || "any";
+        let destNet = cleanedRuleData.destination_net || "any";
+        
+        // Convert arrays to comma-separated strings (which is what OPNsense API expects for v25+)
+        if (Array.isArray(sourceNet)) {
+          sourceNet = sourceNet.join(',');
         }
         
-        const payload = { rule: cleanedRuleData };
-        await invoke('set_rule', { uuid: ruleUuid, ruleData: payload });
+        if (Array.isArray(destNet)) {
+          destNet = destNet.join(',');
+        }
+        
+        // Create different payloads based on API version
+        let payload;
+        
+        if (isNewApiVersion) {
+          // v25+ API - Complex format with all fields and "keep" statetype
+          // Now update the baseline with values from the form
+          // This preserves the structure while letting users edit values
+          const updatedPayload = {
+            ...basePayload,
+            enabled: cleanedRuleData.enabled || "1",
+            sequence: cleanedRuleData.sequence || "1",
+            description: cleanedRuleData.description || "",
+            interface: cleanedRuleData.interface || basePayload.interface,
+            quick: cleanedRuleData.quick || "1", 
+            action: cleanedRuleData.action || "pass",
+            direction: cleanedRuleData.direction || "in",
+            ipprotocol: cleanedRuleData.ipprotocol || "inet",
+            protocol: cleanedRuleData.protocol || basePayload.protocol,
+            source_not: cleanedRuleData.source_not || "0",
+            source_net: sourceNet,
+            source_port: cleanedRuleData.source_port || "",
+            destination_not: cleanedRuleData.destination_not || "0",
+            destination_net: destNet,
+            destination_port: cleanedRuleData.destination_port || "",
+            log: cleanedRuleData.log || "0",
+            // This is IMPORTANT for v25+: Keep statetype as "keep" no matter what
+            statetype: "keep",
+            gateway: cleanedRuleData.gateway || ""
+          };
+          
+          // Final payload with the rule wrapper
+          payload = {
+            rule: updatedPayload
+          };
+        } else {
+          // v24 API - Simpler format with just the fields we need
+          payload = {
+            rule: {
+              enabled: cleanedRuleData.enabled || "1",
+              sequence: cleanedRuleData.sequence || "1",
+              action: cleanedRuleData.action || "pass",
+              quick: cleanedRuleData.quick || "1",
+              interface: cleanedRuleData.interface || "",
+              direction: cleanedRuleData.direction || "in",
+              ipprotocol: cleanedRuleData.ipprotocol || "inet",
+              protocol: cleanedRuleData.protocol || "any",
+              source_net: sourceNet,
+              source_port: cleanedRuleData.source_port || "",
+              source_not: cleanedRuleData.source_not || "0",
+              destination_net: destNet,
+              destination_port: cleanedRuleData.destination_port || "",
+              destination_not: cleanedRuleData.destination_not || "0",
+              gateway: cleanedRuleData.gateway || "",
+              log: cleanedRuleData.log || "0",
+              categories: "",
+              description: cleanedRuleData.description || ""
+            }
+          };
+        }
+        
+        // For debugging
+        console.log("Using exact payload from curl request:", JSON.stringify(payload, null, 2));
+        
+        // Send the update to the backend with the payload
+        const result = await invoke('set_rule', { uuid: ruleUuid, ruleData: payload });
+        console.log("Rule update result:", result);
+        
+        // Apply the changes
         await invoke('apply_firewall_changes');
         toasts.success('Firewall rule updated successfully');
         dispatch('refresh');
@@ -429,38 +684,155 @@
               </div>
               
               {#if ruleData.source_type === 'alias'}
-                <!-- Alias Dropdown for Source -->
                 <div class="form-control">
-                  <label class="label" for="source-alias">
+                  <label class="label" for="source-alias-display">
                     <span class="label-text">Network Alias</span>
                   </label>
-                  <select 
-                    id="source-alias" 
-                    bind:value={ruleData.source_net} 
-                    class="select select-bordered w-full"
-                  >
-                    <option value="">Select Alias</option>
-                    {#each Object.entries(aliasOptions) as [key, value]}
-                      <option value={key}>{value}</option>
-                    {/each}
-                  </select>
+                  
+                  {#if isNewApiVersion}
+                    <!-- v25+ API: Custom Multi-select Dropdown UI for Source -->
+                    <div class="dropdown w-full">
+                      <!-- Display field showing selected items -->
+                      <input 
+                        id="source-alias-display" 
+                        type="text" 
+                        readonly 
+                        placeholder="Select aliases..."
+                        value={Array.isArray(ruleData.source_net) ? 
+                          ruleData.source_net.map(k => aliasOptions[k] || k).join(', ') : 
+                          (aliasOptions[ruleData.source_net] || ruleData.source_net || '')}
+                        class="input input-bordered w-full cursor-pointer"
+                        tabindex="0"
+                      />
+                      
+                      <!-- Dropdown menu with checkboxes -->
+                      <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-full max-h-60 overflow-auto">
+                        {#each Object.entries(aliasOptions) as [key, value]}
+                          <li>
+                            <label class="flex items-center p-2 hover:bg-base-200 rounded">
+                              <input 
+                                type="checkbox" 
+                                class="checkbox checkbox-sm mr-2"
+                                checked={Array.isArray(ruleData.source_net) ? 
+                                  ruleData.source_net.includes(key) : 
+                                  ruleData.source_net === key}
+                                on:change={(e) => {
+                                  // Initialize as array if not already
+                                  if (!Array.isArray(ruleData.source_net)) {
+                                    ruleData.source_net = ruleData.source_net ? [ruleData.source_net] : [];
+                                  }
+                                  
+                                  // Add or remove based on checkbox state
+                                  if (e.target.checked) {
+                                    if (!ruleData.source_net.includes(key)) {
+                                      ruleData.source_net = [...ruleData.source_net, key];
+                                    }
+                                  } else {
+                                    ruleData.source_net = ruleData.source_net.filter(k => k !== key);
+                                  }
+                                }}
+                              />
+                              <span>{value}</span>
+                            </label>
+                          </li>
+                        {/each}
+                      </ul>
+                    </div>
+                  {:else}
+                    <!-- v24 API: Simple Single-select Dropdown UI for Source -->
+                    <select 
+                      id="source-alias" 
+                      bind:value={ruleData.source_net} 
+                      class="select select-bordered w-full"
+                    >
+                      <option value="">Select Alias</option>
+                      {#each Object.entries(aliasOptions) as [key, value]}
+                        <option value={key}>{value}</option>
+                      {/each}
+                    </select>
+                  {/if}
                 </div>
               {:else if ruleData.source_type === 'network' && Object.keys(networkOptions).length > 0}
-                <!-- Network Dropdown for Source -->
+                <!-- Custom Network Dropdown for Source -->
                 <div class="form-control">
-                  <label class="label" for="source-network-dropdown">
+                  <label class="label" for="source-network-display">
                     <span class="label-text">Predefined Network</span>
                   </label>
-                  <select 
-                    id="source-network-dropdown" 
-                    bind:value={ruleData.source_net} 
-                    class="select select-bordered w-full"
-                  >
-                    <option value="any">any</option>
-                    {#each Object.entries(networkOptions) as [key, value]}
-                      <option value={key}>{value}</option>
-                    {/each}
-                  </select>
+                  
+                  <!-- Custom Dropdown UI -->
+                  <div class="dropdown w-full">
+                    <!-- Display field showing selected items -->
+                    <input 
+                      id="source-network-display" 
+                      type="text" 
+                      readonly 
+                      placeholder="Select networks..."
+                      value={Array.isArray(ruleData.source_net) ? 
+                        ruleData.source_net.map(k => k === 'any' ? 'any' : (networkOptions[k] || k)).join(', ') : 
+                        (ruleData.source_net === 'any' ? 'any' : (networkOptions[ruleData.source_net] || ruleData.source_net || ''))}
+                      class="input input-bordered w-full cursor-pointer"
+                      tabindex="0"
+                    />
+                    
+                    <!-- Dropdown menu with checkboxes -->
+                    <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-full max-h-60 overflow-auto">
+                      <li>
+                        <label class="flex items-center p-2 hover:bg-base-200 rounded">
+                          <input 
+                            type="checkbox" 
+                            class="checkbox checkbox-sm mr-2"
+                            checked={Array.isArray(ruleData.source_net) ? 
+                              ruleData.source_net.includes('any') : 
+                              ruleData.source_net === 'any'}
+                            on:change={(e) => {
+                              if (e.target.checked) {
+                                // If "any" is selected, clear other selections
+                                ruleData.source_net = ['any'];
+                              } else {
+                                // Initialize empty array if unchecking "any"
+                                ruleData.source_net = [];
+                              }
+                            }}
+                          />
+                          <span>any</span>
+                        </label>
+                      </li>
+                      {#each Object.entries(networkOptions) as [key, value]}
+                        <li>
+                          <label class="flex items-center p-2 hover:bg-base-200 rounded">
+                            <input 
+                              type="checkbox" 
+                              class="checkbox checkbox-sm mr-2"
+                              checked={Array.isArray(ruleData.source_net) ? 
+                                ruleData.source_net.includes(key) : 
+                                ruleData.source_net === key}
+                              on:change={(e) => {
+                                // Initialize as array if not already
+                                if (!Array.isArray(ruleData.source_net)) {
+                                  ruleData.source_net = ruleData.source_net ? [ruleData.source_net] : [];
+                                }
+                                
+                                // If selecting a network and "any" is currently selected, remove "any"
+                                if (e.target.checked && ruleData.source_net.includes('any')) {
+                                  ruleData.source_net = ruleData.source_net.filter(k => k !== 'any');
+                                }
+                                
+                                // Add or remove based on checkbox state
+                                if (e.target.checked) {
+                                  if (!ruleData.source_net.includes(key)) {
+                                    ruleData.source_net = [...ruleData.source_net, key];
+                                  }
+                                } else {
+                                  ruleData.source_net = ruleData.source_net.filter(k => k !== key);
+                                }
+                              }}
+                            />
+                            <span>{value}</span>
+                          </label>
+                        </li>
+                      {/each}
+                    </ul>
+                  </div>
                 </div>
               {:else}
                 <!-- Manual Input for Source -->
@@ -526,38 +898,155 @@
               </div>
               
               {#if ruleData.destination_type === 'alias'}
-                <!-- Alias Dropdown for Destination -->
                 <div class="form-control">
-                  <label class="label" for="destination-alias">
+                  <label class="label" for="destination-alias-display">
                     <span class="label-text">Network Alias</span>
                   </label>
-                  <select 
-                    id="destination-alias" 
-                    bind:value={ruleData.destination_net} 
-                    class="select select-bordered w-full"
-                  >
-                    <option value="">Select Alias</option>
-                    {#each Object.entries(aliasOptions) as [key, value]}
-                      <option value={key}>{value}</option>
-                    {/each}
-                  </select>
+                  
+                  {#if isNewApiVersion}
+                    <!-- v25+ API: Custom Multi-select Dropdown UI for Destination -->
+                    <div class="dropdown w-full">
+                      <!-- Display field showing selected items -->
+                      <input 
+                        id="destination-alias-display" 
+                        type="text" 
+                        readonly 
+                        placeholder="Select aliases..."
+                        value={Array.isArray(ruleData.destination_net) ? 
+                          ruleData.destination_net.map(k => aliasOptions[k] || k).join(', ') : 
+                          (aliasOptions[ruleData.destination_net] || ruleData.destination_net || '')}
+                        class="input input-bordered w-full cursor-pointer"
+                        tabindex="0"
+                      />
+                      
+                      <!-- Dropdown menu with checkboxes -->
+                      <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-full max-h-60 overflow-auto">
+                        {#each Object.entries(aliasOptions) as [key, value]}
+                          <li>
+                            <label class="flex items-center p-2 hover:bg-base-200 rounded">
+                              <input 
+                                type="checkbox" 
+                                class="checkbox checkbox-sm mr-2"
+                                checked={Array.isArray(ruleData.destination_net) ? 
+                                  ruleData.destination_net.includes(key) : 
+                                  ruleData.destination_net === key}
+                                on:change={(e) => {
+                                  // Initialize as array if not already
+                                  if (!Array.isArray(ruleData.destination_net)) {
+                                    ruleData.destination_net = ruleData.destination_net ? [ruleData.destination_net] : [];
+                                  }
+                                  
+                                  // Add or remove based on checkbox state
+                                  if (e.target.checked) {
+                                    if (!ruleData.destination_net.includes(key)) {
+                                      ruleData.destination_net = [...ruleData.destination_net, key];
+                                    }
+                                  } else {
+                                    ruleData.destination_net = ruleData.destination_net.filter(k => k !== key);
+                                  }
+                                }}
+                              />
+                              <span>{value}</span>
+                            </label>
+                          </li>
+                        {/each}
+                      </ul>
+                    </div>
+                  {:else}
+                    <!-- v24 API: Simple Single-select Dropdown UI for Destination -->
+                    <select 
+                      id="destination-alias" 
+                      bind:value={ruleData.destination_net} 
+                      class="select select-bordered w-full"
+                    >
+                      <option value="">Select Alias</option>
+                      {#each Object.entries(aliasOptions) as [key, value]}
+                        <option value={key}>{value}</option>
+                      {/each}
+                    </select>
+                  {/if}
                 </div>
               {:else if ruleData.destination_type === 'network' && Object.keys(networkOptions).length > 0}
-                <!-- Network Dropdown for Destination -->
+                <!-- Custom Network Dropdown for Destination -->
                 <div class="form-control">
-                  <label class="label" for="destination-network-dropdown">
+                  <label class="label" for="destination-network-display">
                     <span class="label-text">Predefined Network</span>
                   </label>
-                  <select 
-                    id="destination-network-dropdown" 
-                    bind:value={ruleData.destination_net} 
-                    class="select select-bordered w-full"
-                  >
-                    <option value="any">any</option>
-                    {#each Object.entries(networkOptions) as [key, value]}
-                      <option value={key}>{value}</option>
-                    {/each}
-                  </select>
+                  
+                  <!-- Custom Dropdown UI -->
+                  <div class="dropdown w-full">
+                    <!-- Display field showing selected items -->
+                    <input 
+                      id="destination-network-display" 
+                      type="text" 
+                      readonly 
+                      placeholder="Select networks..."
+                      value={Array.isArray(ruleData.destination_net) ? 
+                        ruleData.destination_net.map(k => k === 'any' ? 'any' : (networkOptions[k] || k)).join(', ') : 
+                        (ruleData.destination_net === 'any' ? 'any' : (networkOptions[ruleData.destination_net] || ruleData.destination_net || ''))}
+                      class="input input-bordered w-full cursor-pointer"
+                      tabindex="0"
+                    />
+                    
+                    <!-- Dropdown menu with checkboxes -->
+                    <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-full max-h-60 overflow-auto">
+                      <li>
+                        <label class="flex items-center p-2 hover:bg-base-200 rounded">
+                          <input 
+                            type="checkbox" 
+                            class="checkbox checkbox-sm mr-2"
+                            checked={Array.isArray(ruleData.destination_net) ? 
+                              ruleData.destination_net.includes('any') : 
+                              ruleData.destination_net === 'any'}
+                            on:change={(e) => {
+                              if (e.target.checked) {
+                                // If "any" is selected, clear other selections
+                                ruleData.destination_net = ['any'];
+                              } else {
+                                // Initialize empty array if unchecking "any"
+                                ruleData.destination_net = [];
+                              }
+                            }}
+                          />
+                          <span>any</span>
+                        </label>
+                      </li>
+                      {#each Object.entries(networkOptions) as [key, value]}
+                        <li>
+                          <label class="flex items-center p-2 hover:bg-base-200 rounded">
+                            <input 
+                              type="checkbox" 
+                              class="checkbox checkbox-sm mr-2"
+                              checked={Array.isArray(ruleData.destination_net) ? 
+                                ruleData.destination_net.includes(key) : 
+                                ruleData.destination_net === key}
+                              on:change={(e) => {
+                                // Initialize as array if not already
+                                if (!Array.isArray(ruleData.destination_net)) {
+                                  ruleData.destination_net = ruleData.destination_net ? [ruleData.destination_net] : [];
+                                }
+                                
+                                // If selecting a network and "any" is currently selected, remove "any"
+                                if (e.target.checked && ruleData.destination_net.includes('any')) {
+                                  ruleData.destination_net = ruleData.destination_net.filter(k => k !== 'any');
+                                }
+                                
+                                // Add or remove based on checkbox state
+                                if (e.target.checked) {
+                                  if (!ruleData.destination_net.includes(key)) {
+                                    ruleData.destination_net = [...ruleData.destination_net, key];
+                                  }
+                                } else {
+                                  ruleData.destination_net = ruleData.destination_net.filter(k => k !== key);
+                                }
+                              }}
+                            />
+                            <span>{value}</span>
+                          </label>
+                        </li>
+                      {/each}
+                    </ul>
+                  </div>
                 </div>
               {:else}
                 <!-- Manual Input for Destination -->
