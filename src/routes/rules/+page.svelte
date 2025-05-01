@@ -113,45 +113,80 @@
     
     interfaceRuleCount = {};
     
-    // First check for rules with no interface (floating)
-    try {
-      const floatingResponse = await invoke<{ rows: FirewallRule[] }>(
-        "get_firewall_rules",
-        { interface: "" }
-      );
-      
-      if (floatingResponse.rows.length > 0) {
-        interfaceRuleCount[""] = floatingResponse.rows.length;
-      }
-    } catch (err) {
-      console.error("Failed to prefetch floating rules:", err);
-    }
-    
-    // Check each interface
+    // Get all interfaces, starting with interfaces from the API response
     const allInterfaces = [
       ...interfaces.floating.items,
       ...interfaces.groups.items,
       ...interfaces.interfaces.items
     ];
     
-    for (const iface of allInterfaces) {
-      if (iface.value === "") continue; // Skip empty value, we already checked it
+    // Try parallel approach first
+    try {
+      console.log("Attempting parallel prefetch of interface rules...");
       
-      try {
-        const response = await invoke<{ rows: FirewallRule[] }>(
-          "get_firewall_rules",
-          { interface: iface.value }
-        );
-        
-        if (response.rows.length > 0) {
-          interfaceRuleCount[iface.value] = response.rows.length;
+      // Create an array of promises for all interfaces
+      const requests = allInterfaces.map(iface => {
+        // For each interface, create a promise that resolves to an object with interface and rule count
+        return invoke<{ rows: FirewallRule[] }>("get_firewall_rules", { interface: iface.value })
+          .then(response => ({ 
+            interface: iface.value, 
+            count: response.rows.length,
+            success: true 
+          }))
+          .catch(err => ({ 
+            interface: iface.value, 
+            count: 0,
+            success: false,
+            error: err 
+          }));
+      });
+      
+      // Wait for all requests to complete (successful or not)
+      const results = await Promise.all(requests);
+      
+      // Process results
+      results.forEach(result => {
+        if (result.success && result.count > 0) {
+          interfaceRuleCount[result.interface] = result.count;
         }
-      } catch (err) {
-        console.error(`Failed to prefetch rules for interface ${iface.value}:`, err);
+      });
+      
+      // Check if we had any successful requests
+      const anySuccessful = results.some(r => r.success);
+      if (!anySuccessful) {
+        throw new Error("All parallel requests failed, falling back to sequential");
       }
+      
+      // Log success message
+      console.log("Successfully fetched interface rules in parallel");
+      console.log("Interface rule counts:", interfaceRuleCount);
+    } 
+    catch (error) {
+      // If parallel approach fails, fall back to sequential
+      console.warn("Parallel prefetch failed, falling back to sequential:", error);
+      
+      // Reset interface rule count
+      interfaceRuleCount = {};
+      
+      // Sequential approach
+      for (const iface of allInterfaces) {
+        try {
+          const response = await invoke<{ rows: FirewallRule[] }>(
+            "get_firewall_rules",
+            { interface: iface.value }
+          );
+          
+          if (response.rows.length > 0) {
+            interfaceRuleCount[iface.value] = response.rows.length;
+          }
+        } catch (err) {
+          console.error(`Failed to prefetch rules for interface ${iface.value}:`, err);
+        }
+      }
+      
+      console.log("Sequential prefetch completed");
+      console.log("Interface rule counts:", interfaceRuleCount);
     }
-    
-    console.log("Interface rule counts:", interfaceRuleCount);
   }
   
   function selectFirstInterfaceWithRules() {
@@ -402,7 +437,11 @@
     const interfaceItem = interfaces.interfaces.items.find(i => i.value === value);
     if (interfaceItem) return interfaceItem.label;
 
-    return value || "All Interfaces";
+    // If empty string and we didn't find it in floating items, it's likely "Floating"
+    if (value === "") return "Floating";
+    
+    // Fallback
+    return value;
   }
 </script>
 
@@ -425,7 +464,7 @@
                   <path fill="currentColor" d={mdiFilterMenu} />
                 </svg>
                 <span class="max-w-[120px] truncate">
-                  {selectedInterface ? getInterfaceDisplayName(selectedInterface) : "All Interfaces"}
+                  {getInterfaceDisplayName(selectedInterface)}
                 </span>
               </div>
               <div class="flex items-center gap-1">
@@ -446,20 +485,7 @@
                   <h4 class="font-medium">Filter by Interface</h4>
                 </div>
                 <div class="max-h-80 overflow-y-auto py-2">
-                  <!-- All interfaces option -->
-                  <div class="px-3 mb-1">
-                    <button 
-                      class="w-full text-left px-3 py-2 hover:bg-base-200 rounded-md {selectedInterface === '' ? 'bg-primary/10 text-primary border border-primary/20' : 'hover:bg-base-200'} {!interfaceRuleCount[''] ? 'opacity-60' : ''}"
-                      on:click={() => selectInterface('')}
-                    >
-                      <div class="flex justify-between items-center">
-                        <span class="font-medium">All Interfaces</span>
-                        {#if interfaceRuleCount['']}
-                          <span class="badge badge-sm badge-primary">{interfaceRuleCount['']}</span>
-                        {/if}
-                      </div>
-                    </button>
-                  </div>
+                  <!-- No "All Interfaces" option as it doesn't exist in OPNsense web UI -->
                   
                   <!-- Floating -->
                   <div class="mt-3 mb-2">
@@ -559,7 +585,7 @@
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
           <h3 class="card-title text-lg">
-            {#if isV2Api && selectedInterface}
+            {#if isV2Api}
               No Rules Found for {getInterfaceDisplayName(selectedInterface)}
             {:else}
               No Automation Rules Found
@@ -568,9 +594,10 @@
           <div class="divider my-2"></div>
 
           <div class="space-y-4">
-            {#if isV2Api && selectedInterface}
+            {#if isV2Api}
+              <!-- V2 API with interface-specific rules -->
               <p>
-                There are no firewall rules defined for the selected interface.
+                There are no firewall rules defined for {getInterfaceDisplayName(selectedInterface)}.
               </p>
               
               {#if Object.keys(interfaceRuleCount).length > 0}
@@ -595,7 +622,17 @@
               {:else}
                 <p>You can create rules for this interface by clicking the "Add Rule" button.</p>
               {/if}
+              
+              <div class="bg-base-200 p-4 rounded-lg">
+                <h4 class="font-medium">To create your first rule for {getInterfaceDisplayName(selectedInterface)}:</h4>
+                <ol class="list-decimal pl-5 mt-2 space-y-1">
+                  <li>Click the "Add Rule" button above</li>
+                  <li>Configure your rule settings</li>
+                  <li>Save the rule to see it appear in this list</li>
+                </ol>
+              </div>
             {:else}
+              <!-- Legacy API with only automation rules -->
               <p>
                 Your rules list is empty because OPNsense only exposes <strong
                   >Automation Rules</strong
@@ -646,16 +683,16 @@
                   section of your OPNsense firewall
                 </li>
               </ul>
-            {/if}
 
-            <div class="bg-base-200 p-4 rounded-lg">
-              <h4 class="font-medium">To create your first {isV2Api ? '' : 'automation '}rule:</h4>
-              <ol class="list-decimal pl-5 mt-2 space-y-1">
-                <li>Click the "Add Rule" button above</li>
-                <li>Configure your rule settings</li>
-                <li>Save the rule to see it appear in this list</li>
-              </ol>
-            </div>
+              <div class="bg-base-200 p-4 rounded-lg">
+                <h4 class="font-medium">To create your first automation rule:</h4>
+                <ol class="list-decimal pl-5 mt-2 space-y-1">
+                  <li>Click the "Add Rule" button above</li>
+                  <li>Configure your rule settings</li>
+                  <li>Save the rule to see it appear in this list</li>
+                </ol>
+              </div>
+            {/if}
 
             <p>
               <a
